@@ -20,12 +20,11 @@ func TestExample(t *testing.T) {
 
 		Input          Input
 		ExpectedOutput Output
-		Output         Output
 	}
 
 	// Create a test case template.
 	tc := testcase.New(func(t *testing.T) *Context {
-		return new(Context)
+		return &Context{}
 	}).Setup(func(t *testing.T, c *Context) {
 		var transport http.Transport
 		c.Client = &http.Client{Transport: &transport}
@@ -35,8 +34,9 @@ func TestExample(t *testing.T) {
 			t.FailNow()
 		}
 		resp.Body.Close()
-		c.Output.StatusCode = resp.StatusCode
-		assert.Equal(t, c.ExpectedOutput, c.Output)
+		var output Output
+		output.StatusCode = resp.StatusCode
+		assert.Equal(t, c.ExpectedOutput, output)
 	}).Teardown(func(t *testing.T, c *Context) {
 		c.Client.CloseIdleConnections()
 	})

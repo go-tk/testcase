@@ -52,7 +52,7 @@ func TestRunProcedureMustBeSet(t *testing.T) {
 	})
 }
 
-func TestContextFactoryTypeValidation(t *testing.T) {
+func TestValidateContextFactoryType(t *testing.T) {
 	assert.Panics(t, func() {
 		RunList(t, []TestCase{New(func() struct{} { return struct{}{} })})
 	})
@@ -67,7 +67,7 @@ func TestContextFactoryTypeValidation(t *testing.T) {
 	})
 }
 
-func TestProcedureTypeValidation(t *testing.T) {
+func TestValidateProcedureType(t *testing.T) {
 	assert.Panics(t, func() {
 		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
 			Setup(func(t *testing.T) {})})
@@ -88,4 +88,14 @@ func TestProcedureTypeValidation(t *testing.T) {
 		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
 			Setup(func(t *testing.T, c struct{}) string { return "" })})
 	})
+}
+
+func TestIgnoreOtherTestCases(t *testing.T) {
+	var s []int
+	RunList(t, []TestCase{
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 1) }),
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).IgnoreOthers(),
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 3) }),
+	})
+	assert.Equal(t, []int{2}, s)
 }

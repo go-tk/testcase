@@ -41,7 +41,7 @@ func TestExample(t *testing.T) {
 		c.Client.CloseIdleConnections()
 	})
 
-	testcase.RunListParallel(t, []testcase.TestCase{
+	testcase.RunListParallel(t,
 		tc.Copy().
 			When("get https://httpbin.org/status/200").
 			Then("should respond status code 200").
@@ -63,5 +63,5 @@ func TestExample(t *testing.T) {
 				c.Input.URL = "https://httpbin.org/status/500"
 				c.ExpectedOutput.StatusCode = 500
 			}),
-	})
+	)
 }

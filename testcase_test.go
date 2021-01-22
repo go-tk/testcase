@@ -9,7 +9,7 @@ import (
 
 func TestProcedureOrder(t *testing.T) {
 	var s string
-	RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
+	RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
 		Given("TODO").
 		When("TODO").
 		Then("TODO").
@@ -33,13 +33,13 @@ func TestProcedureOrder(t *testing.T) {
 		}).
 		PostTeardown(func(t *testing.T, c struct{}) {
 			s += "7"
-		})})
+		}))
 	assert.Equal(t, "1234567", s)
 }
 
 func TestRunProcedureMustBeSet(t *testing.T) {
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
 			Given("TODO").
 			When("TODO").
 			Then("TODO").
@@ -48,64 +48,64 @@ func TestRunProcedureMustBeSet(t *testing.T) {
 			PreRun(func(t *testing.T, c struct{}) {}).
 			PostRun(func(t *testing.T, c struct{}) {}).
 			Teardown(func(t *testing.T, c struct{}) {}).
-			PostTeardown(func(t *testing.T, c struct{}) {})})
+			PostTeardown(func(t *testing.T, c struct{}) {}))
 	})
 }
 
 func TestValidateContextFactoryType(t *testing.T) {
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func() struct{} { return struct{}{} })})
+		RunList(t, New(func() struct{} { return struct{}{} }))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) {})})
+		RunList(t, New(func(t *testing.T) {}))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T, s string) struct{} { return struct{}{} })})
+		RunList(t, New(func(t *testing.T, s string) struct{} { return struct{}{} }))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) (struct{}, string) { return struct{}{}, "" })})
+		RunList(t, New(func(t *testing.T) (struct{}, string) { return struct{}{}, "" }))
 	})
 }
 
 func TestValidateProcedureType(t *testing.T) {
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
-			Setup(func(t *testing.T) {})})
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
+			Setup(func(t *testing.T) {}))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
-			Setup(func(c struct{}) {})})
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
+			Setup(func(c struct{}) {}))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
-			Setup(func(t *testing.T, c int) {})})
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
+			Setup(func(t *testing.T, c int) {}))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
-			Setup(func(t *testing.T, c struct{}, s string) {})})
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
+			Setup(func(t *testing.T, c struct{}, s string) {}))
 	})
 	assert.Panics(t, func() {
-		RunList(t, []TestCase{New(func(t *testing.T) struct{} { return struct{}{} }).
-			Setup(func(t *testing.T, c struct{}) string { return "" })})
+		RunList(t, New(func(t *testing.T) struct{} { return struct{}{} }).
+			Setup(func(t *testing.T, c struct{}) string { return "" }))
 	})
 }
 
 func TestExcludeTest(t *testing.T) {
 	var s []int
-	RunList(t, []TestCase{
+	RunList(t,
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 1) }),
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).Exclude(),
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 3) }),
-	})
+	)
 	assert.Equal(t, []int{1, 3}, s)
 }
 
 func TestExcludeOtherTestCases(t *testing.T) {
 	var s []int
-	RunList(t, []TestCase{
+	RunList(t,
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 1) }),
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).ExcludeOthers(),
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 3) }),
-	})
+	)
 	assert.Equal(t, []int{2}, s)
 }

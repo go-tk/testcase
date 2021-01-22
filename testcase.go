@@ -40,12 +40,12 @@ func New(contextFactory interface{}) TestCase {
 }
 
 // RunList runs a list of test cases.
-func RunList(t *testing.T, list []TestCase) {
+func RunList(t *testing.T, list ...TestCase) {
 	doRunList(t, list, false)
 }
 
 // RunListParallel runs a list of test cases parallel.
-func RunListParallel(t *testing.T, list []TestCase) {
+func RunListParallel(t *testing.T, list ...TestCase) {
 	doRunList(t, list, true)
 }
 

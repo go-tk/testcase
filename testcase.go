@@ -14,8 +14,10 @@ import (
 type TestCase interface {
 	Copy() (copy TestCase)
 
-	// Ignore other test cases while running a list of test cases.
-	IgnoreOthers() (self TestCase)
+	// Exclude excludes this test case from the list to run.
+	Exclude() (self TestCase)
+	// ExcludeOthers excludes other test cases from the list to run.
+	ExcludeOthers() (self TestCase)
 
 	// Set information.
 	Given(v string) (self TestCase)
@@ -49,12 +51,15 @@ func RunListParallel(t *testing.T, list []TestCase) {
 
 func doRunList(t *testing.T, list []TestCase, parallel bool) {
 	for _, tc := range list {
-		if tc.(*testCase).ExecuteIfIgnoreOthers(t, parallel) {
+		if tc := tc.(*testCase); tc.ToExcludeOthers {
+			tc.Execute(t, false)
 			return
 		}
 	}
 	for _, tc := range list {
-		tc.(*testCase).Execute(t, parallel)
+		if tc := tc.(*testCase); !tc.ToExclude {
+			tc.Execute(t, parallel)
+		}
 	}
 }
 
@@ -63,7 +68,8 @@ type testCase struct {
 	contextType    reflect.Type
 	name           string
 
-	ignoreOthers bool
+	ToExclude       bool
+	ToExcludeOthers bool
 
 	given string
 	when  string
@@ -86,14 +92,6 @@ func (tc *testCase) Init(contextFactory interface{}) *testCase {
 	_, fileName, lineNumber, _ := runtime.Caller(2)
 	tc.setName(fileName, lineNumber)
 	return tc
-}
-
-func (tc *testCase) ExecuteIfIgnoreOthers(t *testing.T, parallel bool) bool {
-	if !tc.ignoreOthers {
-		return false
-	}
-	tc.Execute(t, parallel)
-	return true
 }
 
 func (tc *testCase) Execute(t *testing.T, parallel bool) {
@@ -150,8 +148,13 @@ func (tc *testCase) Copy() TestCase {
 	return &copy
 }
 
-func (tc *testCase) IgnoreOthers() TestCase {
-	tc.ignoreOthers = true
+func (tc *testCase) Exclude() TestCase {
+	tc.ToExclude = true
+	return tc
+}
+
+func (tc *testCase) ExcludeOthers() TestCase {
+	tc.ToExcludeOthers = true
 	return tc
 }
 

@@ -90,11 +90,21 @@ func TestValidateProcedureType(t *testing.T) {
 	})
 }
 
-func TestIgnoreOtherTestCases(t *testing.T) {
+func TestExcludeTest(t *testing.T) {
 	var s []int
 	RunList(t, []TestCase{
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 1) }),
-		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).IgnoreOthers(),
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).Exclude(),
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 3) }),
+	})
+	assert.Equal(t, []int{1, 3}, s)
+}
+
+func TestExcludeOtherTestCases(t *testing.T) {
+	var s []int
+	RunList(t, []TestCase{
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 1) }),
+		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 2) }).ExcludeOthers(),
 		New(func(t *testing.T) struct{} { return struct{}{} }).Run(func(t *testing.T, c struct{}) { s = append(s, 3) }),
 	})
 	assert.Equal(t, []int{2}, s)

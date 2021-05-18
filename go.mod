@@ -1,4 +1,4 @@
-module github.com/go-tk/testcase
+module github.com/go-tk/testcase/v2
 
 go 1.14
 

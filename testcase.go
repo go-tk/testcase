@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"sort"
 	"testing"
 )
 
 // TestCase represents a test case.
 type TestCase interface {
+	// Copy copies this test case and returns a clone.
 	Copy() (copy TestCase)
 
 	// Exclude excludes this test case from the list to run.
@@ -19,24 +21,19 @@ type TestCase interface {
 	// ExcludeOthers excludes other test cases from the list to run.
 	ExcludeOthers() (self TestCase)
 
-	// Set information.
+	// Set information for this test case.
 	Given(v string) (self TestCase)
 	When(v string) (self TestCase)
 	Then(v string) (self TestCase)
 
-	// Set procedures.
-	PreSetup(v interface{}) (self TestCase)
-	Setup(v interface{}) (self TestCase)
-	PreRun(v interface{}) (self TestCase)
-	Run(v interface{}) (self TestCase)
-	PostRun(v interface{}) (self TestCase)
-	Teardown(v interface{}) (self TestCase)
-	PostTeardown(v interface{}) (self TestCase)
+	// Task adds a new task with the given ID to this test case.
+	// The lower the ID of a task, the sooner the task would be executed.
+	Task(taskID int, task interface{}) (self TestCase)
 }
 
-// New creates a test case with the given context factory.
-func New(contextFactory interface{}) TestCase {
-	return new(testCase).Init(contextFactory)
+// New creates a test case with the given workspace factory.
+func New(workspaceFactory interface{}) TestCase {
+	return new(testCase).Init(workspaceFactory)
 }
 
 // RunList runs a list of test cases.
@@ -52,21 +49,21 @@ func RunListParallel(t *testing.T, list ...TestCase) {
 func doRunList(t *testing.T, list []TestCase, parallel bool) {
 	for _, tc := range list {
 		if tc := tc.(*testCase); tc.ToExcludeOthers {
-			tc.Execute(t, false)
+			tc.Run(t, false)
 			return
 		}
 	}
 	for _, tc := range list {
 		if tc := tc.(*testCase); !tc.ToExclude {
-			tc.Execute(t, parallel)
+			tc.Run(t, parallel)
 		}
 	}
 }
 
 type testCase struct {
-	contextFactory interface{}
-	contextType    reflect.Type
-	name           string
+	name             string
+	workspaceFactory interface{}
+	workspaceType    reflect.Type
 
 	ToExclude       bool
 	ToExcludeOthers bool
@@ -74,78 +71,105 @@ type testCase struct {
 	given string
 	when  string
 	then  string
-
-	preSetup     interface{}
-	setup        interface{}
-	preRun       interface{}
-	run          interface{}
-	postRun      interface{}
-	tearDown     interface{}
-	postTeardown interface{}
+	tasks map[int]interface{}
 }
 
-func (tc *testCase) Init(contextFactory interface{}) *testCase {
-	contextFactoryType := reflect.TypeOf(contextFactory)
-	validateContextFactoryType(contextFactoryType)
-	tc.contextFactory = contextFactory
-	tc.contextType = contextFactoryType.Out(0)
+func (tc *testCase) Init(workspaceFactory interface{}) *testCase {
 	_, fileName, lineNumber, _ := runtime.Caller(2)
 	tc.setName(fileName, lineNumber)
+	workspaceFactoryType := reflect.TypeOf(workspaceFactory)
+	validateWorkspaceFactoryType(workspaceFactoryType)
+	tc.workspaceFactory = workspaceFactory
+	tc.workspaceType = workspaceFactoryType.Out(0)
 	return tc
 }
 
-func (tc *testCase) Execute(t *testing.T, parallel bool) {
-	if tc.run == nil {
-		panic("procedure for Run unset")
+func validateWorkspaceFactoryType(workspaceFactoryType reflect.Type) {
+	if !(workspaceFactoryType.Kind() == reflect.Func &&
+		workspaceFactoryType.NumIn() == 1 &&
+		workspaceFactoryType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
+		workspaceFactoryType.NumOut() == 1) {
+		panic(fmt.Sprintf("invalid workspace factory type, type `func(*testing.T) TYPE` expected; workspaceFactoryType=%v", workspaceFactoryType))
+	}
+}
+
+func (tc *testCase) Run(t *testing.T, parallel bool) {
+	if tc.tasks == nil {
+		panic("no task")
 	}
 	t.Run(tc.name, func(t *testing.T) {
 		if parallel {
 			t.Parallel()
 		}
-		var buffer bytes.Buffer
-		if tc.given != "" {
-			buffer.WriteString("\nGIVEN " + tc.given)
-		}
-		if tc.when != "" {
-			buffer.WriteString("\nWHEN " + tc.when)
-		}
-		if tc.then != "" {
-			buffer.WriteString("\nTHEN " + tc.then)
-		}
-		if buffer.Len() >= 1 {
-			t.Log(buffer.String())
-		}
-		tValue := reflect.ValueOf(t)
-		results := reflect.ValueOf(tc.contextFactory).Call([]reflect.Value{tValue})
-		contextValue := results[0]
-		args := []reflect.Value{tValue, contextValue}
-		if tc.preSetup != nil {
-			reflect.ValueOf(tc.preSetup).Call(args)
-		}
-		if tc.setup != nil {
-			reflect.ValueOf(tc.setup).Call(args)
-		}
-		if tc.preRun != nil {
-			reflect.ValueOf(tc.preRun).Call(args)
-		}
-		reflect.ValueOf(tc.run).Call(args)
-		if tc.postRun != nil {
-			reflect.ValueOf(tc.postRun).Call(args)
-		}
-		if tc.tearDown != nil {
-			reflect.ValueOf(tc.tearDown).Call(args)
-		}
-		if tc.postTeardown != nil {
-			reflect.ValueOf(tc.postTeardown).Call(args)
-		}
+		tc.logGWT(t)
+		tc.executeTasks(t)
 	})
 }
 
+func (tc *testCase) logGWT(t *testing.T) {
+	var buffer bytes.Buffer
+	if tc.given != "" {
+		buffer.WriteString("\nGIVEN " + tc.given)
+	}
+	if tc.when != "" {
+		buffer.WriteString("\nWHEN " + tc.when)
+	}
+	if tc.then != "" {
+		buffer.WriteString("\nTHEN " + tc.then)
+	}
+	if buffer.Len() == 0 {
+		return
+	}
+	t.Log(buffer.String())
+}
+
+func (tc *testCase) executeTasks(t *testing.T) {
+	tasks := tc.sortTasks()
+	tValue := reflect.ValueOf(t)
+	workspaceValue := tc.newWorkspace(tValue)
+	args := []reflect.Value{tValue, workspaceValue}
+	for _, task := range tasks {
+		reflect.ValueOf(task).Call(args)
+	}
+}
+
+func (tc *testCase) sortTasks() []interface{} {
+	taskIDs := make([]int, len(tc.tasks))
+	i := 0
+	for taskID := range tc.tasks {
+		taskIDs[i] = taskID
+		i++
+	}
+	sort.Ints(taskIDs)
+	tasks := make([]interface{}, len(tc.tasks))
+	i = 0
+	for _, taskID := range taskIDs {
+		tasks[i] = tc.tasks[taskID]
+		i++
+	}
+	return tasks
+}
+
+func (tc *testCase) newWorkspace(tValue reflect.Value) reflect.Value {
+	results := reflect.ValueOf(tc.workspaceFactory).Call([]reflect.Value{tValue})
+	workspaceValue := results[0]
+	return workspaceValue
+}
+
 func (tc *testCase) Copy() TestCase {
-	copy := *tc
+	clone := *tc
 	_, fileName, lineNumber, _ := runtime.Caller(1)
-	copy.setName(fileName, lineNumber)
-	return &copy
+	clone.setName(fileName, lineNumber)
+	clone.tasks = tc.copyTasks()
+	return &clone
+}
+
+func (tc *testCase) copyTasks() map[int]interface{} {
+	tasksClone := make(map[int]interface{}, len(tc.tasks))
+	for taskID, task := range tc.tasks {
+		tasksClone[taskID] = task
+	}
+	return tasksClone
 }
 
 func (tc *testCase) Exclude() TestCase {
@@ -173,67 +197,40 @@ func (tc *testCase) Then(v string) TestCase {
 	return tc
 }
 
-func (tc *testCase) PreSetup(v interface{}) TestCase {
-	tc.setProcedure("PreSetup", &tc.preSetup, v)
+func (tc *testCase) Task(taskID int, task interface{}) TestCase {
+	tc.checkTaskID(taskID)
+	taskType := reflect.TypeOf(task)
+	tc.validateTaskType(taskType, taskID)
+	tc.addTest(taskID, task)
 	return tc
 }
 
-func (tc *testCase) Setup(v interface{}) TestCase {
-	tc.setProcedure("Setup", &tc.setup, v)
-	return tc
+func (tc *testCase) checkTaskID(taskID int) {
+	if _, ok := tc.tasks[taskID]; ok {
+		panic(fmt.Sprintf("task already exists; taskID=%v", taskID))
+	}
 }
 
-func (tc *testCase) PreRun(v interface{}) TestCase {
-	tc.setProcedure("PreRun", &tc.preRun, v)
-	return tc
+func (tc *testCase) validateTaskType(taskType reflect.Type, taskID int) {
+	if !(taskType.Kind() == reflect.Func &&
+		taskType.NumIn() == 2 &&
+		taskType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
+		taskType.In(1) == tc.workspaceType) {
+		panic(fmt.Sprintf("invalid task type, type `func(*testing.T, %v)` expected; taskID=%v taskType=%v",
+			tc.workspaceType, taskID, taskType))
+	}
 }
 
-func (tc *testCase) Run(v interface{}) TestCase {
-	tc.setProcedure("Run", &tc.run, v)
-	return tc
-}
-
-func (tc *testCase) PostRun(v interface{}) TestCase {
-	tc.setProcedure("PostRun", &tc.postRun, v)
-	return tc
-}
-
-func (tc *testCase) Teardown(v interface{}) TestCase {
-	tc.setProcedure("Teardown", &tc.tearDown, v)
-	return tc
-}
-
-func (tc *testCase) PostTeardown(v interface{}) TestCase {
-	tc.setProcedure("PostTeardown", &tc.postTeardown, v)
-	return tc
+func (tc *testCase) addTest(taskID int, task interface{}) {
+	tasks := tc.tasks
+	if tasks == nil {
+		tasks = make(map[int]interface{}, 1)
+		tc.tasks = tasks
+	}
+	tasks[taskID] = task
 }
 
 func (tc *testCase) setName(fileName string, lineNumber int) {
 	shortFileName := filepath.Base(fileName)
 	tc.name = fmt.Sprintf("%s:%d", shortFileName, lineNumber)
-}
-
-func (tc *testCase) setProcedure(procedureName string, oldProcedure *interface{}, newProcedure interface{}) {
-	procedureType := reflect.TypeOf(newProcedure)
-	tc.validateProcedureType(procedureType, procedureName)
-	*oldProcedure = newProcedure
-}
-
-func (tc *testCase) validateProcedureType(procedureType reflect.Type, procedureName string) {
-	if !(procedureType.Kind() == reflect.Func &&
-		procedureType.NumIn() == 2 &&
-		procedureType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
-		procedureType.In(1) == tc.contextType) {
-		panic(fmt.Sprintf("invalid procedure type for %v, type `func(*testing.T, %v)` expected; procedureType=%v",
-			procedureName, tc.contextType, procedureType))
-	}
-}
-
-func validateContextFactoryType(contextFactoryType reflect.Type) {
-	if !(contextFactoryType.Kind() == reflect.Func &&
-		contextFactoryType.NumIn() == 1 &&
-		contextFactoryType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
-		contextFactoryType.NumOut() == 1) {
-		panic(fmt.Sprintf("invalid context factory type, type `func(*testing.T) TYPE` expected; contextFactoryType=%v", contextFactoryType))
-	}
 }

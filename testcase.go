@@ -215,7 +215,8 @@ func (tc *testCase) validateTaskType(taskType reflect.Type, taskID int) {
 	if !(taskType.Kind() == reflect.Func &&
 		taskType.NumIn() == 2 &&
 		taskType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
-		taskType.In(1) == tc.workspaceType) {
+		taskType.In(1) == tc.workspaceType &&
+		taskType.NumOut() == 0) {
 		panic(fmt.Sprintf("invalid task type, type `func(*testing.T, %v)` expected; taskID=%v taskType=%v",
 			tc.workspaceType, taskID, taskType))
 	}

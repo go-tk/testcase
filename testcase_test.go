@@ -66,6 +66,17 @@ func TestNoTask(t *testing.T) {
 	})
 }
 
+func TestDuplicateTaskID(t *testing.T) {
+	assert.Panics(t, func() {
+		New(func(t *testing.T) struct{} { return struct{}{} }).
+			Given("NONE").
+			When("NONE").
+			Then("NONE").
+			Task(100, func(t *testing.T, w struct{}) {}).
+			Task(100, func(t *testing.T, w struct{}) {})
+	})
+}
+
 func TestInvalidTaskFactoryType(t *testing.T) {
 	assert.Panics(t, func() {
 		RunList(t, New(func() struct{} { return struct{}{} }))

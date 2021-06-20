@@ -201,7 +201,7 @@ func (tc *testCase) Task(taskID int, task interface{}) TestCase {
 	tc.checkTaskID(taskID)
 	taskType := reflect.TypeOf(task)
 	tc.validateTaskType(taskType, taskID)
-	tc.addTest(taskID, task)
+	tc.addTask(taskID, task)
 	return tc
 }
 
@@ -222,7 +222,7 @@ func (tc *testCase) validateTaskType(taskType reflect.Type, taskID int) {
 	}
 }
 
-func (tc *testCase) addTest(taskID int, task interface{}) {
+func (tc *testCase) addTask(taskID int, task interface{}) {
 	tasks := tc.tasks
 	if tasks == nil {
 		tasks = make(map[int]interface{}, 1)

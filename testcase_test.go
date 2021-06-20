@@ -3,7 +3,7 @@ package testcase_test
 import (
 	"testing"
 
-	. "github.com/go-tk/testcase/v2"
+	. "github.com/go-tk/testcase"
 	"github.com/stretchr/testify/assert"
 )
 

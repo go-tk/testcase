@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/go-tk/testcase/v2"
+	"github.com/go-tk/testcase"
 	"github.com/stretchr/testify/assert"
 )
 

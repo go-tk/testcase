@@ -37,6 +37,13 @@ func TestTestCase_AddTask(t *testing.T) {
 		Bar string
 	}) {
 	})
+	assert.PanicsWithValue(t, "task should have no result; taskID=100 taskType=func(*struct { testcase.WorkspaceBase }) int", func() {
+		New().AddTask(100, func(*struct {
+			WorkspaceBase
+		}) int {
+			return 0
+		})
+	})
 	assert.PanicsWithValue(t, "task type mismatch; taskID=100 taskType=func(*testcase_test.Workspace2) expectedTaskType=func(*testcase_test.Workspace1)", func() {
 		type Workspace1 struct {
 			WorkspaceBase

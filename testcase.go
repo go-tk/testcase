@@ -9,32 +9,40 @@ import (
 	"runtime"
 	"sort"
 	"testing"
+	"unsafe"
 )
 
 // TestCase represents a test case.
-type TestCase interface {
-	// Copy copies this test case and returns a clone.
-	Copy() (clone TestCase)
+type TestCase struct {
+	tc testCase
+}
 
-	// Exclude excludes this test case from the list to run.
-	Exclude() (self TestCase)
-	// ExcludeOthers excludes other test cases from the list to run.
-	ExcludeOthers() (self TestCase)
+// Copy copies the test case and returns a clone.
+func (tc *TestCase) Copy() (clone *TestCase) { return tc.tc.Copy().TestCase() }
 
-	// Given/When/Then annotates this test case.
-	Given(given string) (self TestCase)
-	When(when string) (self TestCase)
-	Then(then string) (self TestCase)
+// Exclude excludes the test case from the list to run.
+func (tc *TestCase) Exclude() (self *TestCase) { return tc.tc.Exclude().TestCase() }
 
-	// AddTask adds a task with the given ID to this test case.
-	// Tasks with lower IDs will be executed before ones with higher IDs.
-	AddTask(taskID int, task interface{}) (self TestCase)
+// ExcludeOthers excludes other test cases from the list to run.
+func (tc *TestCase) ExcludeOthers() (self *TestCase) { return tc.tc.ExcludeOthers().TestCase() }
+
+// Given annotates the test case.
+func (tc *TestCase) Given(given string) (self *TestCase) { return tc.tc.Given(given).TestCase() }
+
+// When annotates the test case.
+func (tc *TestCase) When(when string) (self *TestCase) { return tc.tc.When(when).TestCase() }
+
+// Then annotates the test case.
+func (tc *TestCase) Then(then string) (self *TestCase) { return tc.tc.Then(then).TestCase() }
+
+// AddTask adds a task with the given ID to the test case.
+// Tasks with lower IDs will be executed before ones with higher IDs.
+func (tc *TestCase) AddTask(taskID int, task interface{}) (self *TestCase) {
+	return tc.tc.AddTask(taskID, task).TestCase()
 }
 
 // New creates a new test case.
-func New() TestCase {
-	return new(testCase).Init()
-}
+func New() *TestCase { return new(testCase).Init().TestCase() }
 
 type testCase struct {
 	ToExclude       bool
@@ -56,7 +64,7 @@ func (tc *testCase) Init() *testCase {
 	return tc
 }
 
-func (tc *testCase) Copy() TestCase {
+func (tc *testCase) Copy() *testCase {
 	clone := testCase{
 		ToExclude:       tc.ToExclude,
 		ToExcludeOthers: tc.ToExcludeOthers,
@@ -87,32 +95,32 @@ func (tc *testCase) copyTasks() map[int]interface{} {
 	return tasksClone
 }
 
-func (tc *testCase) Exclude() TestCase {
+func (tc *testCase) Exclude() *testCase {
 	tc.ToExclude = true
 	return tc
 }
 
-func (tc *testCase) ExcludeOthers() TestCase {
+func (tc *testCase) ExcludeOthers() *testCase {
 	tc.ToExcludeOthers = true
 	return tc
 }
 
-func (tc *testCase) Given(given string) TestCase {
+func (tc *testCase) Given(given string) *testCase {
 	tc.given = given
 	return tc
 }
 
-func (tc *testCase) When(when string) TestCase {
+func (tc *testCase) When(when string) *testCase {
 	tc.when = when
 	return tc
 }
 
-func (tc *testCase) Then(then string) TestCase {
+func (tc *testCase) Then(then string) *testCase {
 	tc.then = then
 	return tc
 }
 
-func (tc *testCase) AddTask(taskID int, task interface{}) TestCase {
+func (tc *testCase) AddTask(taskID int, task interface{}) *testCase {
 	tc.validateTaskType(task, taskID)
 	tc.doAddTask(taskID, task)
 	return tc
@@ -239,31 +247,32 @@ func (tc *testCase) newWorkspace(t *testing.T) (reflect.Value, *workspaceBase) {
 	workspaceValuePtr := reflect.New(tc.workspaceType)
 	workspaceValue := workspaceValuePtr.Elem()
 	workspaceBaseValue := workspaceValue.Field(tc.workspaceBaseFieldIndex)
-	workspaceBase := newWorkspaceBase(t)
-	workspaceBaseValue.Set(reflect.ValueOf(workspaceBase))
+	workspaceBase := &workspaceBaseValue.Addr().Interface().(*WorkspaceBase).wb
+	workspaceBase.Init(t)
 	return workspaceValuePtr, workspaceBase
 }
 
-// WorkspaceBase should be embedded into concrete workspaces as their bases.
-type WorkspaceBase interface {
-	// T returns the testing.T associated with this workspace.
-	T() *testing.T
+func (tc *testCase) TestCase() *TestCase { return (*TestCase)(unsafe.Pointer(tc)) }
 
-	// AddCleanup adds a cleanup to this workspace.
-	AddCleanup(cleanup func())
+// WorkspaceBase should be embedded into concrete workspaces as their bases.
+type WorkspaceBase struct {
+	wb workspaceBase
 }
+
+// T returns the testing.T associated with the workspace.
+func (wb *WorkspaceBase) T() (t *testing.T) { return wb.wb.T() }
+
+// AddCleanup adds a cleanup to the workspace.
+func (wb *WorkspaceBase) AddCleanup(cleanup func()) { wb.wb.AddCleanup(cleanup) }
 
 type workspaceBase struct {
 	t        *testing.T
 	cleanups []func()
 }
 
-var _ WorkspaceBase = (*workspaceBase)(nil)
-
-func newWorkspaceBase(t *testing.T) *workspaceBase {
-	var w workspaceBase
-	w.t = t
-	return &w
+func (wb *workspaceBase) Init(t *testing.T) *workspaceBase {
+	wb.t = t
+	return wb
 }
 
 func (wb *workspaceBase) T() *testing.T             { return wb.t }
@@ -277,24 +286,26 @@ func (wb *workspaceBase) Clean() {
 }
 
 // RunList runs the given list of test cases.
-func RunList(t *testing.T, list ...TestCase) {
+func RunList(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, false)
 }
 
 // RunListParallel runs the given list of test cases parallel.
-func RunListParallel(t *testing.T, list ...TestCase) {
+func RunListParallel(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, true)
 }
 
-func doRunList(t *testing.T, list []TestCase, parallel bool) {
+func doRunList(t *testing.T, list []*TestCase, parallel bool) {
 	for _, tc := range list {
-		if tc := tc.(*testCase); tc.ToExcludeOthers {
+		tc := &tc.tc
+		if tc.ToExcludeOthers {
 			tc.Run(t, false)
 			return
 		}
 	}
 	for _, tc := range list {
-		if tc := tc.(*testCase); !tc.ToExclude {
+		tc := &tc.tc
+		if !tc.ToExclude {
 			tc.Run(t, parallel)
 		}
 	}

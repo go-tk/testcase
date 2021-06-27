@@ -14,90 +14,175 @@ import (
 // TestCase represents a test case.
 type TestCase interface {
 	// Copy copies this test case and returns a clone.
-	Copy() (copy TestCase)
+	Copy() (clone TestCase)
 
 	// Exclude excludes this test case from the list to run.
 	Exclude() (self TestCase)
 	// ExcludeOthers excludes other test cases from the list to run.
 	ExcludeOthers() (self TestCase)
 
-	// Set information for this test case.
-	Given(v string) (self TestCase)
-	When(v string) (self TestCase)
-	Then(v string) (self TestCase)
+	// Given/When/Then annotates this test case.
+	Given(given string) (self TestCase)
+	When(when string) (self TestCase)
+	Then(then string) (self TestCase)
 
-	// Task adds a new task with the given ID to this test case.
-	// The lower the ID of a task, the sooner the task would be executed.
-	Task(taskID int, task interface{}) (self TestCase)
+	// AddTask adds a task with the given ID to this test case.
+	// Tasks with lower IDs will be executed before ones with higher IDs.
+	AddTask(taskID int, task interface{}) (self TestCase)
 }
 
-// New creates a test case with the given workspace factory.
-func New(workspaceFactory interface{}) TestCase {
-	return new(testCase).Init(workspaceFactory)
-}
-
-// RunList runs a list of test cases.
-func RunList(t *testing.T, list ...TestCase) {
-	doRunList(t, list, false)
-}
-
-// RunListParallel runs a list of test cases parallel.
-func RunListParallel(t *testing.T, list ...TestCase) {
-	doRunList(t, list, true)
-}
-
-func doRunList(t *testing.T, list []TestCase, parallel bool) {
-	for _, tc := range list {
-		if tc := tc.(*testCase); tc.ToExcludeOthers {
-			tc.Run(t, false)
-			return
-		}
-	}
-	for _, tc := range list {
-		if tc := tc.(*testCase); !tc.ToExclude {
-			tc.Run(t, parallel)
-		}
-	}
+// New creates a new test case.
+func New() TestCase {
+	return new(testCase).Init()
 }
 
 type testCase struct {
-	name             string
-	workspaceFactory interface{}
-	workspaceType    reflect.Type
-
 	ToExclude       bool
 	ToExcludeOthers bool
 
-	given string
-	when  string
-	then  string
-	tasks map[int]interface{}
+	locator                 string
+	given                   string
+	when                    string
+	then                    string
+	taskType                reflect.Type
+	workspaceType           reflect.Type
+	workspaceBaseFieldIndex int
+	tasks                   map[int]interface{}
 }
 
-func (tc *testCase) Init(workspaceFactory interface{}) *testCase {
+func (tc *testCase) Init() *testCase {
 	_, fileName, lineNumber, _ := runtime.Caller(2)
-	tc.setName(fileName, lineNumber)
-	workspaceFactoryType := reflect.TypeOf(workspaceFactory)
-	validateWorkspaceFactoryType(workspaceFactoryType)
-	tc.workspaceFactory = workspaceFactory
-	tc.workspaceType = workspaceFactoryType.Out(0)
+	tc.setLocator(fileName, lineNumber)
 	return tc
 }
 
-func validateWorkspaceFactoryType(workspaceFactoryType reflect.Type) {
-	if !(workspaceFactoryType.Kind() == reflect.Func &&
-		workspaceFactoryType.NumIn() == 1 &&
-		workspaceFactoryType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
-		workspaceFactoryType.NumOut() == 1) {
-		panic(fmt.Sprintf("invalid workspace factory type, type `func(*testing.T) TYPE` expected; workspaceFactoryType=%v", workspaceFactoryType))
+func (tc *testCase) Copy() TestCase {
+	clone := testCase{
+		ToExclude:       tc.ToExclude,
+		ToExcludeOthers: tc.ToExcludeOthers,
+
+		given:                   tc.given,
+		when:                    tc.when,
+		then:                    tc.then,
+		taskType:                tc.taskType,
+		workspaceType:           tc.workspaceType,
+		workspaceBaseFieldIndex: tc.workspaceBaseFieldIndex,
 	}
+	_, fileName, lineNumber, _ := runtime.Caller(1)
+	clone.setLocator(fileName, lineNumber)
+	clone.tasks = tc.copyTasks()
+	return &clone
+}
+
+func (tc *testCase) setLocator(fileName string, lineNumber int) {
+	shortFileName := filepath.Base(fileName)
+	tc.locator = fmt.Sprintf("%s:%d", shortFileName, lineNumber)
+}
+
+func (tc *testCase) copyTasks() map[int]interface{} {
+	tasksClone := make(map[int]interface{}, len(tc.tasks))
+	for taskID, task := range tc.tasks {
+		tasksClone[taskID] = task
+	}
+	return tasksClone
+}
+
+func (tc *testCase) Exclude() TestCase {
+	tc.ToExclude = true
+	return tc
+}
+
+func (tc *testCase) ExcludeOthers() TestCase {
+	tc.ToExcludeOthers = true
+	return tc
+}
+
+func (tc *testCase) Given(given string) TestCase {
+	tc.given = given
+	return tc
+}
+
+func (tc *testCase) When(when string) TestCase {
+	tc.when = when
+	return tc
+}
+
+func (tc *testCase) Then(then string) TestCase {
+	tc.then = then
+	return tc
+}
+
+func (tc *testCase) AddTask(taskID int, task interface{}) TestCase {
+	tc.validateTaskType(task, taskID)
+	tc.doAddTask(taskID, task)
+	return tc
+}
+
+func (tc *testCase) validateTaskType(task interface{}, taskID int) {
+	taskType := reflect.TypeOf(task)
+	if tc.taskType != nil {
+		if taskType != tc.taskType {
+			panic(fmt.Sprintf("task type mismatch; taskID=%v taskType=%v expectedTaskType=%v",
+				taskID, taskType, tc.taskType))
+		}
+		return
+	}
+	if taskType.Kind() != reflect.Func {
+		panic(fmt.Sprintf("task should be function; taskID=%v taskType=%v", taskID, taskType))
+	}
+	if taskType.NumIn() != 1 {
+		panic(fmt.Sprintf("task should have exactly one argument; taskID=%v taskType=%v",
+			taskID, taskType))
+	}
+	workspaceTypePtr := taskType.In(0)
+	if workspaceTypePtr.Kind() != reflect.Ptr {
+		panic(fmt.Sprintf("task argument #1 should be pointer; taskID=%v taskType=%v",
+			taskID, taskType))
+	}
+	workspaceType := workspaceTypePtr.Elem()
+	if workspaceType.Kind() != reflect.Struct {
+		panic(fmt.Sprintf("task argument #1 should point to structure; taskID=%v taskType=%v",
+			taskID, taskType))
+	}
+	workspaceBaseType := reflect.TypeOf((*WorkspaceBase)(nil)).Elem()
+	workspaceBaseFieldIndex := -1
+	for i, n := 0, workspaceType.NumField(); i < n; i++ {
+		f := workspaceType.Field(i)
+		if f.Anonymous && f.Type == workspaceBaseType {
+			workspaceBaseFieldIndex = i
+			break
+		}
+	}
+	if workspaceBaseFieldIndex < 0 {
+		panic(fmt.Sprintf("structure `%v` should embed interface `%v`; taskID=%v taskType=%v",
+			workspaceType, workspaceBaseType, taskID, taskType))
+	}
+	if taskType.NumOut() != 0 {
+		panic(fmt.Sprintf("task should have no result; taskID=%v taskType=%v", taskID, taskType))
+	}
+	tc.taskType = taskType
+	tc.workspaceType = workspaceType
+	tc.workspaceBaseFieldIndex = workspaceBaseFieldIndex
+}
+
+func (tc *testCase) doAddTask(taskID int, task interface{}) {
+	tasks := tc.tasks
+	if tasks == nil {
+		tasks = make(map[int]interface{}, 1)
+		tc.tasks = tasks
+	} else {
+		if _, ok := tasks[taskID]; ok {
+			panic(fmt.Sprintf("duplicate task id; taskID=%v", taskID))
+		}
+	}
+	tasks[taskID] = task
 }
 
 func (tc *testCase) Run(t *testing.T, parallel bool) {
 	if tc.tasks == nil {
 		panic("no task")
 	}
-	t.Run(tc.name, func(t *testing.T) {
+	t.Run(tc.locator, func(t *testing.T) {
 		if parallel {
 			t.Parallel()
 		}
@@ -125,9 +210,9 @@ func (tc *testCase) logGWT(t *testing.T) {
 
 func (tc *testCase) executeTasks(t *testing.T) {
 	tasks := tc.sortTasks()
-	tValue := reflect.ValueOf(t)
-	workspaceValue := tc.newWorkspace(tValue)
-	args := []reflect.Value{tValue, workspaceValue}
+	workspaceValuePtr, workspaceBase := tc.newWorkspace(t)
+	defer workspaceBase.Clean()
+	args := []reflect.Value{workspaceValuePtr}
 	for _, task := range tasks {
 		reflect.ValueOf(task).Call(args)
 	}
@@ -150,88 +235,67 @@ func (tc *testCase) sortTasks() []interface{} {
 	return tasks
 }
 
-func (tc *testCase) newWorkspace(tValue reflect.Value) reflect.Value {
-	results := reflect.ValueOf(tc.workspaceFactory).Call([]reflect.Value{tValue})
-	workspaceValue := results[0]
-	return workspaceValue
+func (tc *testCase) newWorkspace(t *testing.T) (reflect.Value, *workspaceBase) {
+	workspaceValuePtr := reflect.New(tc.workspaceType)
+	workspaceValue := workspaceValuePtr.Elem()
+	workspaceBaseValue := workspaceValue.Field(tc.workspaceBaseFieldIndex)
+	workspaceBase := newWorkspaceBase(t)
+	workspaceBaseValue.Set(reflect.ValueOf(workspaceBase))
+	return workspaceValuePtr, workspaceBase
 }
 
-func (tc *testCase) Copy() TestCase {
-	clone := *tc
-	_, fileName, lineNumber, _ := runtime.Caller(1)
-	clone.setName(fileName, lineNumber)
-	clone.tasks = tc.copyTasks()
-	return &clone
+// WorkspaceBase should be embedded into concrete workspaces as their bases.
+type WorkspaceBase interface {
+	// T returns the testing.T associated with this workspace.
+	T() *testing.T
+
+	// AddCleanup adds a cleanup to this workspace.
+	AddCleanup(cleanup func())
 }
 
-func (tc *testCase) copyTasks() map[int]interface{} {
-	tasksClone := make(map[int]interface{}, len(tc.tasks))
-	for taskID, task := range tc.tasks {
-		tasksClone[taskID] = task
-	}
-	return tasksClone
+type workspaceBase struct {
+	t        *testing.T
+	cleanups []func()
 }
 
-func (tc *testCase) Exclude() TestCase {
-	tc.ToExclude = true
-	return tc
+var _ WorkspaceBase = (*workspaceBase)(nil)
+
+func newWorkspaceBase(t *testing.T) *workspaceBase {
+	var w workspaceBase
+	w.t = t
+	return &w
 }
 
-func (tc *testCase) ExcludeOthers() TestCase {
-	tc.ToExcludeOthers = true
-	return tc
-}
+func (wb *workspaceBase) T() *testing.T             { return wb.t }
+func (wb *workspaceBase) AddCleanup(cleanup func()) { wb.cleanups = append(wb.cleanups, cleanup) }
 
-func (tc *testCase) Given(v string) TestCase {
-	tc.given = v
-	return tc
-}
-
-func (tc *testCase) When(v string) TestCase {
-	tc.when = v
-	return tc
-}
-
-func (tc *testCase) Then(v string) TestCase {
-	tc.then = v
-	return tc
-}
-
-func (tc *testCase) Task(taskID int, task interface{}) TestCase {
-	tc.checkTaskID(taskID)
-	taskType := reflect.TypeOf(task)
-	tc.validateTaskType(taskType, taskID)
-	tc.addTask(taskID, task)
-	return tc
-}
-
-func (tc *testCase) checkTaskID(taskID int) {
-	if _, ok := tc.tasks[taskID]; ok {
-		panic(fmt.Sprintf("task already exists; taskID=%v", taskID))
+func (wb *workspaceBase) Clean() {
+	for i := len(wb.cleanups) - 1; i >= 0; i-- {
+		cleanup := wb.cleanups[i]
+		cleanup()
 	}
 }
 
-func (tc *testCase) validateTaskType(taskType reflect.Type, taskID int) {
-	if !(taskType.Kind() == reflect.Func &&
-		taskType.NumIn() == 2 &&
-		taskType.In(0) == reflect.TypeOf((*testing.T)(nil)) &&
-		taskType.In(1) == tc.workspaceType &&
-		taskType.NumOut() == 0) {
-		panic(fmt.Sprintf("invalid task type, type `func(*testing.T, %v)` expected; taskID=%v taskType=%v",
-			tc.workspaceType, taskID, taskType))
-	}
+// RunList runs the given list of test cases.
+func RunList(t *testing.T, list ...TestCase) {
+	doRunList(t, list, false)
 }
 
-func (tc *testCase) addTask(taskID int, task interface{}) {
-	tasks := tc.tasks
-	if tasks == nil {
-		tasks = make(map[int]interface{}, 1)
-		tc.tasks = tasks
-	}
-	tasks[taskID] = task
+// RunListParallel runs the given list of test cases parallel.
+func RunListParallel(t *testing.T, list ...TestCase) {
+	doRunList(t, list, true)
 }
 
-func (tc *testCase) setName(fileName string, lineNumber int) {
-	shortFileName := filepath.Base(fileName)
-	tc.name = fmt.Sprintf("%s:%d", shortFileName, lineNumber)
+func doRunList(t *testing.T, list []TestCase, parallel bool) {
+	for _, tc := range list {
+		if tc := tc.(*testCase); tc.ToExcludeOthers {
+			tc.Run(t, false)
+			return
+		}
+	}
+	for _, tc := range list {
+		if tc := tc.(*testCase); !tc.ToExclude {
+			tc.Run(t, parallel)
+		}
+	}
 }

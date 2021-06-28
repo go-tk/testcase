@@ -76,7 +76,7 @@ func (tc *testCase) Copy() *testCase {
 		workspaceType:           tc.workspaceType,
 		workspaceBaseFieldIndex: tc.workspaceBaseFieldIndex,
 	}
-	_, fileName, lineNumber, _ := runtime.Caller(1)
+	_, fileName, lineNumber, _ := runtime.Caller(2)
 	clone.setLocator(fileName, lineNumber)
 	clone.tasks = tc.copyTasks()
 	return &clone

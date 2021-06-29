@@ -162,7 +162,7 @@ func (tc *testCase) validateTaskType(task interface{}, taskID int) {
 		}
 	}
 	if workspaceBaseFieldIndex < 0 {
-		panic(fmt.Sprintf("structure `%v` should embed interface `%v`; taskID=%v taskType=%v",
+		panic(fmt.Sprintf("structure `%v` should embed structure `%v`; taskID=%v taskType=%v",
 			workspaceType, workspaceBaseType, taskID, taskType))
 	}
 	if taskType.NumOut() != 0 {

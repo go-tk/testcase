@@ -24,7 +24,7 @@ func TestTestCase_AddTask(t *testing.T) {
 	assert.PanicsWithValue(t, "task argument #1 should point to structure; taskID=100 taskType=func(*int)", func() {
 		New().AddTask(100, func(*int) {})
 	})
-	assert.PanicsWithValue(t, "structure `struct {}` should embed interface `testcase.WorkspaceBase`; taskID=100 taskType=func(*struct {})", func() {
+	assert.PanicsWithValue(t, "structure `struct {}` should embed structure `testcase.WorkspaceBase`; taskID=100 taskType=func(*struct {})", func() {
 		New().AddTask(100, func(*struct{}) {})
 	})
 	New().AddTask(100, func(*struct {

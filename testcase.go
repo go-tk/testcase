@@ -36,7 +36,7 @@ func (tc *TestCase) When(when string) (self *TestCase) { return tc.tc.When(when)
 func (tc *TestCase) Then(then string) (self *TestCase) { return tc.tc.Then(then).TestCase() }
 
 // AddTask adds a task with the given ID to the test case.
-// Tasks with lower IDs will be executed before ones with higher IDs.
+// Tasks will be executed in ascending order of ID.
 func (tc *TestCase) AddTask(taskID int, task interface{}) (self *TestCase) {
 	return tc.tc.AddTask(taskID, task).TestCase()
 }
@@ -263,6 +263,8 @@ type WorkspaceBase struct {
 func (wb *WorkspaceBase) T() (t *testing.T) { return wb.wb.T() }
 
 // AddCleanup adds a cleanup to the workspace.
+// Cleanups will be executed after all tasks are executed or panics occur.
+// If there are multiple cleanups added, they will be executed in reverse order.
 func (wb *WorkspaceBase) AddCleanup(cleanup func()) { wb.wb.AddCleanup(cleanup) }
 
 type workspaceBase struct {
@@ -285,12 +287,18 @@ func (wb *workspaceBase) Clean() {
 	}
 }
 
-// RunList runs the given list of test cases.
+// RunList runs the given list of test cases, tasks in each test case will be
+// executed in order
+// Test cases will be run with brand-new and isolated workspaces, the same workspace is
+// shared with each task in a test case.
 func RunList(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, false)
 }
 
-// RunListParallel runs the given list of test cases parallel.
+// RunListParallel runs the given list of test cases parallel, tasks in each test case
+// will be executed in order.
+// Test cases will be run with brand-new and isolated workspaces, the same workspace is
+// shared with each task in a test case.
 func RunListParallel(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, true)
 }

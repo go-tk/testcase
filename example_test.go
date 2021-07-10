@@ -24,8 +24,7 @@ func TestExample(t *testing.T) {
 	}
 
 	// Create a test case template.
-	// NOTE: Numbers 1000 & 2000 are task IDs, tasks with lower IDs will be
-	// executed before ones with higher IDs.
+	// NOTE: Numbers 1000 & 2000 are task IDs, tasks will be executed in ascending order of ID.
 	tcTmpl := testcase.New().
 		AddTask(1000, func(w *Workspace) {
 			// Set up the workspace.
@@ -33,6 +32,8 @@ func TestExample(t *testing.T) {
 
 			w.AddCleanup(func() {
 				// Clean up the workspace.
+				// NOTE: Cleanups will be executed after all tasks are executed or
+				//       panics occur.
 				w.Client.CloseIdleConnections()
 			})
 		}).
@@ -50,7 +51,11 @@ func TestExample(t *testing.T) {
 			assert.Equal(w.T(), w.ExpectedOutput, output)
 		})
 
-	// Copy the test case template, insert new tasks to populate test data, run test cases.
+	// Make copies of test case template, insert new tasks into it for populating test data
+	// and then run them parallel.
+	// NOTE: Tasks in each test case will be executed in order. Test cases will be run with
+	//       brand-new and isolated workspaces, the same workspace is shared with each task
+	//       in a test case.
 	testcase.RunListParallel(t,
 		tcTmpl.Copy().
 			Given("http client").

@@ -288,7 +288,7 @@ func (wb *workspaceBase) Clean() {
 }
 
 // RunList runs the given list of test cases, tasks in each test case will be
-// executed in order
+// executed in order.
 // Test cases will be run with brand-new and isolated workspaces, the same workspace is
 // shared with each task in a test case.
 func RunList(t *testing.T, list ...*TestCase) {

@@ -41,20 +41,21 @@ func TestExample(t *testing.T) {
                 }).
                 AddTask(2000, func(w *Workspace) {
                         // Do the test.
-                        // NOTE: use `w.T()` instead of `t`.
                         resp, err := w.Client.Get(w.Input.URL)
+                        // NOTE: use `w.T()` instead of `t`.
                         if !assert.NoError(w.T(), err) {
                                 w.T().FailNow()
                         }
                         resp.Body.Close()
 
+                        // Compare the output with the expected output.
                         var output Output
                         output.StatusCode = resp.StatusCode
                         assert.Equal(w.T(), w.ExpectedOutput, output)
                 })
 
-        // Make copies of test case template, insert new tasks into it for populating test data
-        // and then run them parallel.
+        // Make copies of the test case template, insert new tasks into copies for populating
+        // test data and then run them parallel.
         // NOTE: Tasks in each test case will be executed in order. Test cases will be run with
         //       brand-new and isolated workspaces, the same workspace is shared with each task
         //       in a test case.

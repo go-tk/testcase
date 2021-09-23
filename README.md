@@ -26,9 +26,9 @@ func TestExample(t *testing.T) {
         }
 
         // Create a test case template.
-        // NOTE: Numbers 1000 & 2000 are task IDs, tasks will be executed in ascending order of ID.
+        // NOTE: Numbers 10 & 20 are task IDs, tasks will be executed in ascending order of ID.
         tcTmpl := testcase.New().
-                AddTask(1000, func(w *Workspace) {
+                AddTask(10, func(w *Workspace) {
                         // Set up the workspace.
                         w.Client = &http.Client{Transport: &http.Transport{}}
 
@@ -39,7 +39,7 @@ func TestExample(t *testing.T) {
                                 w.Client.CloseIdleConnections()
                         })
                 }).
-                AddTask(2000, func(w *Workspace) {
+                AddTask(20, func(w *Workspace) {
                         // Do the test.
                         resp, err := w.Client.Get(w.Input.URL)
                         // NOTE: use `w.T()` instead of `t`.
@@ -64,7 +64,7 @@ func TestExample(t *testing.T) {
                         Given("http client").
                         When("get https://httpbin.org/status/200").
                         Then("should respond status code 200").
-                        AddTask(1999, func(w *Workspace) {
+                        AddTask(19, func(w *Workspace) {
                                 // Populate the input & expected output.
                                 w.Input.URL = "https://httpbin.org/status/200"
                                 w.ExpectedOutput.StatusCode = 200
@@ -73,7 +73,7 @@ func TestExample(t *testing.T) {
                         Given("http client").
                         When("get https://httpbin.org/status/400").
                         Then("should respond status code 400").
-                        AddTask(1999, func(w *Workspace) {
+                        AddTask(19, func(w *Workspace) {
                                 // Populate the input & expected output.
                                 w.Input.URL = "https://httpbin.org/status/400"
                                 w.ExpectedOutput.StatusCode = 400
@@ -82,7 +82,7 @@ func TestExample(t *testing.T) {
                         Given("http client").
                         When("get https://httpbin.org/status/500").
                         Then("should respond status code 500").
-                        AddTask(1999, func(w *Workspace) {
+                        AddTask(19, func(w *Workspace) {
                                 // Populate the input & expected output.
                                 w.Input.URL = "https://httpbin.org/status/500"
                                 w.ExpectedOutput.StatusCode = 500

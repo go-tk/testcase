@@ -1,7 +1,7 @@
 # testcase
 
 [![GoDev](https://pkg.go.dev/badge/golang.org/x/pkgsite.svg)](https://pkg.go.dev/github.com/go-tk/testcase
-) [![Build Status](https://travis-ci.com/go-tk/testcase.svg?branch=master)](https://travis-ci.com/github/go-tk/testcase
+) [![Workflow Status](https://github.com/go-tk/testcase/actions/workflows/default.yaml/badge.svg?branch=master)](https://github.com/go-tk/testcase/actions
 ) [![Coverage Status](https://codecov.io/gh/go-tk/testcase/branch/master/graph/badge.svg)](https://codecov.io/gh/go-tk/testcase
 )
 

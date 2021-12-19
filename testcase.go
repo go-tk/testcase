@@ -35,27 +35,26 @@ func (tc *TestCase) When(when string) (self *TestCase) { return tc.tc.When(when)
 // Then annotates the test case.
 func (tc *TestCase) Then(then string) (self *TestCase) { return tc.tc.Then(then).TestCase() }
 
-// AddTask adds a task with the given ID to the test case.
-// Tasks will be executed in ascending order of ID.
-func (tc *TestCase) AddTask(taskID int, task interface{}) (self *TestCase) {
-	return tc.tc.AddTask(taskID, task).TestCase()
+// Step adds a step with the given number to the test case.
+// Steps will be executed in ascending order of step number.
+func (tc *TestCase) Step(stepNo float64, step interface{}) (self *TestCase) {
+	return tc.tc.Step(stepNo, step).TestCase()
 }
 
 // New creates a new test case.
 func New() *TestCase { return new(testCase).Init().TestCase() }
 
 type testCase struct {
-	ToExclude       bool
-	ToExcludeOthers bool
+	IsExcluded        bool
+	OthersAreExcluded bool
 
-	locator                 string
-	given                   string
-	when                    string
-	then                    string
-	taskType                reflect.Type
-	workspaceType           reflect.Type
-	workspaceBaseFieldIndex int
-	tasks                   map[int]interface{}
+	locator       string
+	given         string
+	when          string
+	then          string
+	stepType      reflect.Type
+	workspaceType reflect.Type
+	steps         map[float64]interface{}
 }
 
 func (tc *testCase) Init() *testCase {
@@ -66,19 +65,18 @@ func (tc *testCase) Init() *testCase {
 
 func (tc *testCase) Copy() *testCase {
 	clone := testCase{
-		ToExclude:       tc.ToExclude,
-		ToExcludeOthers: tc.ToExcludeOthers,
+		IsExcluded:        tc.IsExcluded,
+		OthersAreExcluded: tc.OthersAreExcluded,
 
-		given:                   tc.given,
-		when:                    tc.when,
-		then:                    tc.then,
-		taskType:                tc.taskType,
-		workspaceType:           tc.workspaceType,
-		workspaceBaseFieldIndex: tc.workspaceBaseFieldIndex,
+		given:         tc.given,
+		when:          tc.when,
+		then:          tc.then,
+		stepType:      tc.stepType,
+		workspaceType: tc.workspaceType,
 	}
 	_, fileName, lineNumber, _ := runtime.Caller(2)
 	clone.setLocator(fileName, lineNumber)
-	clone.tasks = tc.copyTasks()
+	clone.steps = tc.copySteps()
 	return &clone
 }
 
@@ -87,21 +85,21 @@ func (tc *testCase) setLocator(fileName string, lineNumber int) {
 	tc.locator = fmt.Sprintf("%s:%d", shortFileName, lineNumber)
 }
 
-func (tc *testCase) copyTasks() map[int]interface{} {
-	tasksClone := make(map[int]interface{}, len(tc.tasks))
-	for taskID, task := range tc.tasks {
-		tasksClone[taskID] = task
+func (tc *testCase) copySteps() map[float64]interface{} {
+	stepsClone := make(map[float64]interface{}, len(tc.steps))
+	for stepNo, step := range tc.steps {
+		stepsClone[stepNo] = step
 	}
-	return tasksClone
+	return stepsClone
 }
 
 func (tc *testCase) Exclude() *testCase {
-	tc.ToExclude = true
+	tc.IsExcluded = true
 	return tc
 }
 
 func (tc *testCase) ExcludeOthers() *testCase {
-	tc.ToExcludeOthers = true
+	tc.OthersAreExcluded = true
 	return tc
 }
 
@@ -120,82 +118,77 @@ func (tc *testCase) Then(then string) *testCase {
 	return tc
 }
 
-func (tc *testCase) AddTask(taskID int, task interface{}) *testCase {
-	tc.validateTaskType(task, taskID)
-	tc.doAddTask(taskID, task)
+func (tc *testCase) Step(stepNo float64, step interface{}) *testCase {
+	tc.validateStepType(step, stepNo)
+	tc.addStep(stepNo, step)
 	return tc
 }
 
-func (tc *testCase) validateTaskType(task interface{}, taskID int) {
-	taskType := reflect.TypeOf(task)
-	if tc.taskType != nil {
-		if taskType != tc.taskType {
-			panic(fmt.Sprintf("task type mismatch; taskID=%v taskType=%v expectedTaskType=%v",
-				taskID, taskType, tc.taskType))
+func (tc *testCase) validateStepType(step interface{}, stepNo float64) {
+	stepType := reflect.TypeOf(step)
+	if tc.stepType != nil {
+		if stepType != tc.stepType {
+			panic(fmt.Sprintf("step type mismatch; stepNo=%v stepType=%q expectedStepType=%q",
+				stepNo, stepType, tc.stepType))
 		}
 		return
 	}
-	if taskType.Kind() != reflect.Func {
-		panic(fmt.Sprintf("task should be function; taskID=%v taskType=%v", taskID, taskType))
+	if stepType.Kind() != reflect.Func {
+		panic(fmt.Sprintf("step should be function; stepNo=%v stepType=%q", stepNo, stepType))
 	}
-	if taskType.NumIn() != 1 {
-		panic(fmt.Sprintf("task should have exactly one argument; taskID=%v taskType=%v",
-			taskID, taskType))
+	if stepType.NumIn() != 2 {
+		panic(fmt.Sprintf("step should have exactly two parameters; stepNo=%v stepType=%q",
+			stepNo, stepType))
 	}
-	workspaceTypePtr := taskType.In(0)
-	if workspaceTypePtr.Kind() != reflect.Ptr {
-		panic(fmt.Sprintf("task argument #1 should be pointer; taskID=%v taskType=%v",
-			taskID, taskType))
+	if stepType.In(0) != reflect.TypeOf((*testing.T)(nil)) {
+		panic(fmt.Sprintf("step parameter #1 should be pointer to testing.T; stepNo=%v stepType=%q",
+			stepNo, stepType))
 	}
-	workspaceType := workspaceTypePtr.Elem()
-	if workspaceType.Kind() != reflect.Struct {
-		panic(fmt.Sprintf("task argument #1 should point to structure; taskID=%v taskType=%v",
-			taskID, taskType))
-	}
-	workspaceBaseType := reflect.TypeOf((*WorkspaceBase)(nil)).Elem()
-	workspaceBaseFieldIndex := -1
-	for i, n := 0, workspaceType.NumField(); i < n; i++ {
-		f := workspaceType.Field(i)
-		if f.Anonymous && f.Type == workspaceBaseType {
-			workspaceBaseFieldIndex = i
-			break
+	workspaceType, ok := func() (reflect.Type, bool) {
+		workspaceTypePtr := stepType.In(1)
+		if workspaceTypePtr.Kind() != reflect.Ptr {
+			return nil, false
 		}
+		workspaceType := workspaceTypePtr.Elem()
+		if workspaceType.Kind() != reflect.Struct {
+			return nil, false
+		}
+		return workspaceType, true
+	}()
+	if !ok {
+		panic(fmt.Sprintf("step parameter #2 should be pointer to structure; stepNo=%v stepType=%q",
+			stepNo, stepType))
 	}
-	if workspaceBaseFieldIndex < 0 {
-		panic(fmt.Sprintf("structure `%v` should embed structure `%v`; taskID=%v taskType=%v",
-			workspaceType, workspaceBaseType, taskID, taskType))
+	if stepType.NumOut() != 0 {
+		panic(fmt.Sprintf("step should not return any results; stepNo=%v stepType=%q", stepNo, stepType))
 	}
-	if taskType.NumOut() != 0 {
-		panic(fmt.Sprintf("task should have no result; taskID=%v taskType=%v", taskID, taskType))
-	}
-	tc.taskType = taskType
+	tc.stepType = stepType
 	tc.workspaceType = workspaceType
-	tc.workspaceBaseFieldIndex = workspaceBaseFieldIndex
 }
 
-func (tc *testCase) doAddTask(taskID int, task interface{}) {
-	tasks := tc.tasks
-	if tasks == nil {
-		tasks = make(map[int]interface{}, 1)
-		tc.tasks = tasks
+func (tc *testCase) addStep(stepNo float64, step interface{}) {
+	steps := tc.steps
+	if steps == nil {
+		steps = make(map[float64]interface{}, 1)
+		tc.steps = steps
 	} else {
-		if _, ok := tasks[taskID]; ok {
-			panic(fmt.Sprintf("duplicate task id; taskID=%v", taskID))
+		if _, ok := steps[stepNo]; ok {
+			panic(fmt.Sprintf("duplicate step number; stepNo=%v", stepNo))
 		}
 	}
-	tasks[taskID] = task
+	steps[stepNo] = step
 }
 
 func (tc *testCase) Run(t *testing.T, parallel bool) {
-	if tc.tasks == nil {
-		panic("no task")
+	if tc.steps == nil {
+		panic("no step")
 	}
 	t.Run(tc.locator, func(t *testing.T) {
 		if parallel {
 			t.Parallel()
 		}
 		tc.logGWT(t)
-		tc.executeTasks(t)
+		tc.executeSteps(t)
 	})
 }
 
@@ -216,89 +209,47 @@ func (tc *testCase) logGWT(t *testing.T) {
 	t.Log(buffer.String())
 }
 
-func (tc *testCase) executeTasks(t *testing.T) {
-	tasks := tc.sortTasks()
-	workspaceValuePtr, workspaceBase := tc.newWorkspace(t)
-	defer workspaceBase.Clean()
-	args := []reflect.Value{workspaceValuePtr}
-	for _, task := range tasks {
-		reflect.ValueOf(task).Call(args)
-	}
-}
-
-func (tc *testCase) sortTasks() []interface{} {
-	taskIDs := make([]int, len(tc.tasks))
-	i := 0
-	for taskID := range tc.tasks {
-		taskIDs[i] = taskID
-		i++
-	}
-	sort.Ints(taskIDs)
-	tasks := make([]interface{}, len(tc.tasks))
-	i = 0
-	for _, taskID := range taskIDs {
-		tasks[i] = tc.tasks[taskID]
-		i++
-	}
-	return tasks
-}
-
-func (tc *testCase) newWorkspace(t *testing.T) (reflect.Value, *workspaceBase) {
+func (tc *testCase) executeSteps(t *testing.T) {
+	steps := tc.sortSteps()
+	tValuePtr := reflect.ValueOf(t)
 	workspaceValuePtr := reflect.New(tc.workspaceType)
-	workspaceValue := workspaceValuePtr.Elem()
-	workspaceBaseValue := workspaceValue.Field(tc.workspaceBaseFieldIndex)
-	workspaceBase := &workspaceBaseValue.Addr().Interface().(*WorkspaceBase).wb
-	workspaceBase.Init(t)
-	return workspaceValuePtr, workspaceBase
+	args := []reflect.Value{tValuePtr, workspaceValuePtr}
+	for _, step := range steps {
+		reflect.ValueOf(step).Call(args)
+	}
+}
+
+func (tc *testCase) sortSteps() []interface{} {
+	stepNos := make([]float64, len(tc.steps))
+	i := 0
+	for stepNo := range tc.steps {
+		stepNos[i] = stepNo
+		i++
+	}
+	sort.Float64s(stepNos)
+	steps := make([]interface{}, len(tc.steps))
+	i = 0
+	for _, stepNo := range stepNos {
+		steps[i] = tc.steps[stepNo]
+		i++
+	}
+	return steps
 }
 
 func (tc *testCase) TestCase() *TestCase { return (*TestCase)(unsafe.Pointer(tc)) }
 
-// WorkspaceBase should be embedded into concrete workspaces as their bases.
-type WorkspaceBase struct {
-	wb workspaceBase
-}
-
-// T returns the testing.T associated with the workspace.
-func (wb *WorkspaceBase) T() (t *testing.T) { return wb.wb.T() }
-
-// AddCleanup adds a cleanup to the workspace.
-// Cleanups will be executed after all tasks are executed or panics occur.
-// If there are multiple cleanups added, they will be executed in reverse order.
-func (wb *WorkspaceBase) AddCleanup(cleanup func()) { wb.wb.AddCleanup(cleanup) }
-
-type workspaceBase struct {
-	t        *testing.T
-	cleanups []func()
-}
-
-func (wb *workspaceBase) Init(t *testing.T) *workspaceBase {
-	wb.t = t
-	return wb
-}
-
-func (wb *workspaceBase) T() *testing.T             { return wb.t }
-func (wb *workspaceBase) AddCleanup(cleanup func()) { wb.cleanups = append(wb.cleanups, cleanup) }
-
-func (wb *workspaceBase) Clean() {
-	for i := len(wb.cleanups) - 1; i >= 0; i-- {
-		cleanup := wb.cleanups[i]
-		cleanup()
-	}
-}
-
-// RunList runs the given list of test cases, tasks in each test case will be
+// RunList runs the given list of test cases, steps in each test case will be
 // executed in order.
-// Test cases will be run with brand-new and isolated workspaces, the same workspace is
-// shared with each task in a test case.
+// Test cases will be run with isolated workspaces and each step in a test case
+// shares the same workspace.
 func RunList(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, false)
 }
 
-// RunListParallel runs the given list of test cases parallel, tasks in each test case
+// RunListParallel runs the given list of test cases parallel, steps in each test case
 // will be executed in order.
-// Test cases will be run with brand-new and isolated workspaces, the same workspace is
-// shared with each task in a test case.
+// Test cases will be run with isolated workspaces and each step in a test case
+// shares the same workspace.
 func RunListParallel(t *testing.T, list ...*TestCase) {
 	doRunList(t, list, true)
 }
@@ -306,14 +257,14 @@ func RunListParallel(t *testing.T, list ...*TestCase) {
 func doRunList(t *testing.T, list []*TestCase, parallel bool) {
 	for _, tc := range list {
 		tc := &tc.tc
-		if tc.ToExcludeOthers {
+		if tc.OthersAreExcluded {
 			tc.Run(t, false)
 			return
 		}
 	}
 	for _, tc := range list {
 		tc := &tc.tc
-		if !tc.ToExclude {
+		if !tc.IsExcluded {
 			tc.Run(t, parallel)
 		}
 	}

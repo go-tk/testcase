@@ -16,53 +16,50 @@ func TestExample(t *testing.T) {
 		StatusCode int
 	}
 	type Workspace struct {
-		testcase.WorkspaceBase // mandatory
-
 		Client         *http.Client
 		Input          Input
 		ExpectedOutput Output
 	}
 
 	// Create a test case template.
-	// NOTE: Numbers 10 & 20 are task IDs, tasks will be executed in ascending order of ID.
+	// NOTE: Numbers 1 & 2 are step numbers, steps will be executed in ascending order of
+	//       step number.
 	tcTmpl := testcase.New().
-		AddTask(10, func(w *Workspace) {
+		Step(1, func(t *testing.T, w *Workspace) {
 			// Set up the workspace.
 			w.Client = &http.Client{Transport: &http.Transport{}}
 
-			w.AddCleanup(func() {
+			t.Cleanup(func() {
 				// Clean up the workspace.
-				// NOTE: Cleanups will be executed after all tasks are executed or
-				//       panics occur.
+				// NOTE: Cleanups will be executed after all steps are executed
+				//       or panics occur.
 				w.Client.CloseIdleConnections()
 			})
 		}).
-		AddTask(20, func(w *Workspace) {
+		Step(2, func(t *testing.T, w *Workspace) {
 			// Do the test.
 			resp, err := w.Client.Get(w.Input.URL)
-			// NOTE: use `w.T()` instead of `t`.
-			if !assert.NoError(w.T(), err) {
-				w.T().FailNow()
+			if !assert.NoError(t, err) {
+				t.FailNow()
 			}
 			resp.Body.Close()
 
 			// Compare the output with the expected output.
 			var output Output
 			output.StatusCode = resp.StatusCode
-			assert.Equal(w.T(), w.ExpectedOutput, output)
+			assert.Equal(t, w.ExpectedOutput, output)
 		})
 
-	// Make copies of the test case template, insert new tasks into copies for populating
+	// Make copies of the test case template, insert new steps into copies for populating
 	// test data and then run them parallel.
-	// NOTE: Tasks in each test case will be executed in order. Test cases will be run with
-	//       brand-new and isolated workspaces, the same workspace is shared with each task
-	//       in a test case.
+	// NOTE: Steps in each test case will be executed in order. Test cases will be run with
+	//       isolated workspaces and each step in a test case shares the same workspace.
 	testcase.RunListParallel(t,
 		tcTmpl.Copy().
 			Given("http client").
 			When("get https://httpbin.org/status/200").
 			Then("should respond status code 200").
-			AddTask(19, func(w *Workspace) {
+			Step(1.9, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/200"
 				w.ExpectedOutput.StatusCode = 200
@@ -71,7 +68,7 @@ func TestExample(t *testing.T) {
 			Given("http client").
 			When("get https://httpbin.org/status/400").
 			Then("should respond status code 400").
-			AddTask(19, func(w *Workspace) {
+			Step(1.9, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/400"
 				w.ExpectedOutput.StatusCode = 400
@@ -80,7 +77,7 @@ func TestExample(t *testing.T) {
 			Given("http client").
 			When("get https://httpbin.org/status/500").
 			Then("should respond status code 500").
-			AddTask(19, func(w *Workspace) {
+			Step(1.9, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/500"
 				w.ExpectedOutput.StatusCode = 500

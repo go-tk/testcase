@@ -8,116 +8,95 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTestCase_AddTask(t *testing.T) {
-	assert.PanicsWithValue(t, "task should be function; taskID=100 taskType=string", func() {
-		New().AddTask(100, "foo")
+func TestTestCase_Step(t *testing.T) {
+	assert.PanicsWithValue(t, "step should be function; stepNo=1 stepType=\"string\"", func() {
+		New().Step(1, "foo")
 	})
-	assert.PanicsWithValue(t, "task should have exactly one argument; taskID=100 taskType=func()", func() {
-		New().AddTask(100, func() {})
+	assert.PanicsWithValue(t, "step should have exactly two parameters; stepNo=1 stepType=\"func()\"", func() {
+		New().Step(1, func() {})
 	})
-	assert.PanicsWithValue(t, "task should have exactly one argument; taskID=100 taskType=func(int, string)", func() {
-		New().AddTask(100, func(int, string) {})
+	assert.PanicsWithValue(t, "step should have exactly two parameters; stepNo=1 stepType=\"func(bool, int, string)\"", func() {
+		New().Step(1, func(bool, int, string) {})
 	})
-	assert.PanicsWithValue(t, "task argument #1 should be pointer; taskID=100 taskType=func(int)", func() {
-		New().AddTask(100, func(int) {})
+	assert.PanicsWithValue(t, "step parameter #1 should be pointer to testing.T; stepNo=1 stepType=\"func(int, *struct {})\"", func() {
+		New().Step(1, func(int, *struct{}) {})
 	})
-	assert.PanicsWithValue(t, "task argument #1 should point to structure; taskID=100 taskType=func(*int)", func() {
-		New().AddTask(100, func(*int) {})
+	assert.PanicsWithValue(t, "step parameter #2 should be pointer to structure; stepNo=1 stepType=\"func(*testing.T, int)\"", func() {
+		New().Step(1, func(*testing.T, int) {})
 	})
-	assert.PanicsWithValue(t, "structure `struct {}` should embed structure `testcase.WorkspaceBase`; taskID=100 taskType=func(*struct {})", func() {
-		New().AddTask(100, func(*struct{}) {})
+	assert.PanicsWithValue(t, "step parameter #2 should be pointer to structure; stepNo=1 stepType=\"func(*testing.T, *int)\"", func() {
+		New().Step(1, func(*testing.T, *int) {})
 	})
-	New().AddTask(100, func(*struct {
-		WorkspaceBase
-	}) {
+	assert.PanicsWithValue(t, "step should not return any results; stepNo=1 stepType=\"func(*testing.T, *struct {}) int\"", func() {
+		New().Step(1, func(*testing.T, *struct{}) int { return 0 })
 	})
-	New().AddTask(100, func(*struct {
-		Foo int
-		WorkspaceBase
-		Bar string
-	}) {
-	})
-	assert.PanicsWithValue(t, "task should have no result; taskID=100 taskType=func(*struct { testcase.WorkspaceBase }) int", func() {
-		New().AddTask(100, func(*struct {
-			WorkspaceBase
-		}) int {
-			return 0
-		})
-	})
-	assert.PanicsWithValue(t, "task type mismatch; taskID=100 taskType=func(*testcase_test.Workspace2) expectedTaskType=func(*testcase_test.Workspace1)", func() {
-		type Workspace1 struct {
-			WorkspaceBase
-		}
-		type Workspace2 struct {
-			WorkspaceBase
-		}
-		New().AddTask(100, func(*Workspace1) {}).AddTask(100, func(*Workspace2) {})
-	})
-	assert.PanicsWithValue(t, "duplicate task id; taskID=100", func() {
+	assert.PanicsWithValue(t, "step type mismatch; stepNo=1 stepType=\"func(*testing.T, *testcase_test.Workspace2)\" expectedStepType=\"func(*testing.T, *testcase_test.Workspace1)\"", func() {
+		type Workspace1 struct{}
+		type Workspace2 struct{}
 		New().
-			AddTask(100, func(*struct {
-				WorkspaceBase
-			}) {
-			}).
-			AddTask(100, func(*struct {
-				WorkspaceBase
-			}) {
-			})
+			Step(1, func(*testing.T, *Workspace1) {}).
+			Step(1, func(*testing.T, *Workspace2) {})
 	})
-	type Workspace0 struct {
-		WorkspaceBase
-	}
+	assert.PanicsWithValue(t, "duplicate step number; stepNo=1", func() {
+		New().
+			Step(1, func(*testing.T, *struct{}) {}).
+			Step(1, func(*testing.T, *struct{}) {})
+	})
 	New().
-		AddTask(100, func(*struct {
-			WorkspaceBase
-		}) {
-		}).
-		AddTask(101, func(*struct {
-			WorkspaceBase
-		}) {
-		})
+		Step(1, func(*testing.T, *struct{}) {}).
+		Step(2, func(*testing.T, *struct{}) {})
 }
 
 func TestTestCase_Run(t *testing.T) {
-	assert.PanicsWithValue(t, "no task", func() {
+	assert.PanicsWithValue(t, "no step", func() {
 		RunList(t, New())
 	})
+	type Workspace struct {
+		N int
+	}
 	var s string
-	RunList(t, New().
-		AddTask(1000, func(w *struct{ WorkspaceBase }) {
+	tc := New().
+		Step(1, func(t *testing.T, w *Workspace) {
+			assert.Equal(t, 1, w.N)
+			w.N += 1
 			s += "2"
-			w.AddCleanup(func() { s += "5" })
+			t.Cleanup(func() { s += "5" })
 		}).
-		AddTask(999, func(w *struct{ WorkspaceBase }) {
-			assert.Regexp(w.T(), "^TestTestCase_Run/testcase_test\\.go:", w.T().Name())
+		Step(0.9, func(t *testing.T, w *Workspace) {
+			assert.Equal(t, 0, w.N)
+			w.N += 1
+			assert.Regexp(t, "^TestTestCase_Run/testcase_test\\.go:", t.Name())
 			s += "1"
-			w.AddCleanup(func() { s += "6" })
+			t.Cleanup(func() { s += "6" })
 		}).
-		AddTask(1001, func(w *struct{ WorkspaceBase }) {
+		Step(1.1, func(t *testing.T, w *Workspace) {
+			assert.Equal(t, 2, w.N)
+			w.N += 1
 			s += "3"
-			w.AddCleanup(func() { s += "4" })
-		}))
-	assert.Equal(t, "123456", s)
+			t.Cleanup(func() { s += "4" })
+		})
+	RunList(t, tc, tc)
+	assert.Equal(t, "123456123456", s)
 }
 
 func TestTestCase_Clone(t *testing.T) {
 	var s string
 	tc1 := New().
-		AddTask(1000, func(w *struct{ WorkspaceBase }) {
+		Step(1, func(t *testing.T, _ *struct{}) {
 			s += "2"
-			w.AddCleanup(func() { s += "5" })
+			t.Cleanup(func() { s += "5" })
 		}).
-		AddTask(1001, func(w *struct{ WorkspaceBase }) {
+		Step(2, func(t *testing.T, _ *struct{}) {
 			s += "3"
-			w.AddCleanup(func() { s += "4" })
+			t.Cleanup(func() { s += "4" })
 		})
-	tc2 := tc1.Copy().AddTask(999, func(w *struct{ WorkspaceBase }) {
+	tc2 := tc1.Copy().Step(0.9, func(t *testing.T, _ *struct{}) {
 		s += "1"
-		w.AddCleanup(func() { s += "6" })
+		t.Cleanup(func() { s += "6" })
 	})
-	tc3 := tc1.Copy().AddTask(999, func(w *struct{ WorkspaceBase }) {
+	tc3 := tc1.Copy().Step(0.9, func(t *testing.T, _ *struct{}) {
 		s += "A"
-		w.AddCleanup(func() { s += "B" })
+		t.Cleanup(func() { s += "B" })
 	})
 	RunList(t, tc1)
 	assert.Equal(t, "2345", s)
@@ -133,15 +112,15 @@ func TestTestCase_Exclude(t *testing.T) {
 	var s string
 	RunList(t,
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "1"
 			}),
 		New().Exclude().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "2"
 			}),
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "3"
 			}),
 	)
@@ -152,15 +131,15 @@ func TestTestCase_ExcludeOthers(t *testing.T) {
 	var s string
 	RunList(t,
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "1"
 			}),
 		New().ExcludeOthers().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "2"
 			}),
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				s += "3"
 			}),
 	)
@@ -171,15 +150,15 @@ func TestRunListParallel(t *testing.T) {
 	t0 := time.Now()
 	RunListParallel(t,
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				time.Sleep(time.Second)
 			}),
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				time.Sleep(time.Second)
 			}),
 		New().
-			AddTask(1000, func(w *struct{ WorkspaceBase }) {
+			Step(100, func(*testing.T, *struct{}) {
 				time.Sleep(time.Second)
 			}),
 	)

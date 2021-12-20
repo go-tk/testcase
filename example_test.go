@@ -59,7 +59,7 @@ func TestExample(t *testing.T) {
 			Given("http client").
 			When("get https://httpbin.org/status/200").
 			Then("should respond status code 200").
-			Step(1.9, func(t *testing.T, w *Workspace) {
+			Step(1.5, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/200"
 				w.ExpectedOutput.StatusCode = 200
@@ -68,7 +68,7 @@ func TestExample(t *testing.T) {
 			Given("http client").
 			When("get https://httpbin.org/status/400").
 			Then("should respond status code 400").
-			Step(1.9, func(t *testing.T, w *Workspace) {
+			Step(1.5, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/400"
 				w.ExpectedOutput.StatusCode = 400
@@ -77,7 +77,7 @@ func TestExample(t *testing.T) {
 			Given("http client").
 			When("get https://httpbin.org/status/500").
 			Then("should respond status code 500").
-			Step(1.9, func(t *testing.T, w *Workspace) {
+			Step(1.5, func(t *testing.T, w *Workspace) {
 				// Populate the input & expected output.
 				w.Input.URL = "https://httpbin.org/status/500"
 				w.ExpectedOutput.StatusCode = 500

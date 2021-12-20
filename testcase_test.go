@@ -62,14 +62,14 @@ func TestTestCase_Run(t *testing.T) {
 			s += "2"
 			t.Cleanup(func() { s += "5" })
 		}).
-		Step(0.9, func(t *testing.T, w *Workspace) {
+		Step(0.5, func(t *testing.T, w *Workspace) {
 			assert.Equal(t, 0, w.N)
 			w.N += 1
 			assert.Regexp(t, "^TestTestCase_Run/testcase_test\\.go:", t.Name())
 			s += "1"
 			t.Cleanup(func() { s += "6" })
 		}).
-		Step(1.1, func(t *testing.T, w *Workspace) {
+		Step(1.5, func(t *testing.T, w *Workspace) {
 			assert.Equal(t, 2, w.N)
 			w.N += 1
 			s += "3"
@@ -90,11 +90,11 @@ func TestTestCase_Clone(t *testing.T) {
 			s += "3"
 			t.Cleanup(func() { s += "4" })
 		})
-	tc2 := tc1.Copy().Step(0.9, func(t *testing.T, _ *struct{}) {
+	tc2 := tc1.Copy().Step(0.5, func(t *testing.T, _ *struct{}) {
 		s += "1"
 		t.Cleanup(func() { s += "6" })
 	})
-	tc3 := tc1.Copy().Step(0.9, func(t *testing.T, _ *struct{}) {
+	tc3 := tc1.Copy().Step(0.5, func(t *testing.T, _ *struct{}) {
 		s += "A"
 		t.Cleanup(func() { s += "B" })
 	})

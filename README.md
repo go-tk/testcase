@@ -22,7 +22,7 @@ func TestExample(t *testing.T) {
         }
 
         // Create a test case template.
-        // NOTE: Numbers 0, 1, 2 are step numbers, steps will be executed in ascending order of
+        // NOTE: Numbers 1, 2, 3 are step numbers, steps will be executed in ascending order of
         //       step number.
         tc := testcase.New().
                 Step(1, func(t *testing.T, w *Workspace) {

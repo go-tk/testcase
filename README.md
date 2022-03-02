@@ -1,8 +1,8 @@
 # testcase
 
 [![GoDev](https://pkg.go.dev/badge/golang.org/x/pkgsite.svg)](https://pkg.go.dev/github.com/go-tk/testcase)
-[![Workflow Status](https://github.com/go-tk/testcase/actions/workflows/main.yaml/badge.svg?branch=main)](https://github.com/go-tk/testcase/actions)
-[![Coverage Status](https://codecov.io/gh/go-tk/testcase/branch/main/graph/badge.svg)](https://codecov.io/gh/go-tk/testcase)
+[![Workflow Status](https://github.com/go-tk/testcase/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/go-tk/testcase/actions/workflows/ci.yaml?query=branch%3Amain)
+[![Coverage Status](https://codecov.io/gh/go-tk/testcase/branch/main/graph/badge.svg)](https://codecov.io/gh/go-tk/testcase/branch/main)
 
 Tiny testing framework (BDD-style)
 

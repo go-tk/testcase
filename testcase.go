@@ -47,13 +47,9 @@ func validateFunctionType(functionType reflect.Type) bool {
 }
 
 func (tc *TestCase) Copy() *TestCase {
-	callbackValues := tc.copyCallbackValues()
-	return &TestCase{
-		functionValue:  tc.functionValue,
-		functionType:   tc.functionType,
-		contextPtrType: tc.contextPtrType,
-		callbackValues: callbackValues,
-	}
+	copy := *tc
+	copy.callbackValues = copy.copyCallbackValues()
+	return &copy
 }
 
 func (tc *TestCase) copyCallbackValues() map[interface{}]reflect.Value {

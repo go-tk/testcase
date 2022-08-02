@@ -13,7 +13,7 @@ type TestCase struct {
 	functionValue  reflect.Value
 	functionType   reflect.Type
 	contextPtrType reflect.Type
-	callbackValues map[int]reflect.Value
+	callbackValues map[interface{}]reflect.Value
 }
 
 func New(function interface{}) *TestCase {
@@ -56,25 +56,25 @@ func (tc *TestCase) Copy() *TestCase {
 	}
 }
 
-func (tc *TestCase) copyCallbackValues() map[int]reflect.Value {
+func (tc *TestCase) copyCallbackValues() map[interface{}]reflect.Value {
 	if tc.callbackValues == nil {
 		return nil
 	}
-	callbackValues := make(map[int]reflect.Value, len(tc.callbackValues))
+	callbackValues := make(map[interface{}]reflect.Value, len(tc.callbackValues))
 	for callbackID, callbackValue := range tc.callbackValues {
 		callbackValues[callbackID] = callbackValue
 	}
 	return callbackValues
 }
 
-func (tc *TestCase) SetCallback(callbackID int, callback interface{}) *TestCase {
+func (tc *TestCase) SetCallback(callbackID interface{}, callback interface{}) *TestCase {
 	callbackValue := reflect.ValueOf(callback)
 	if callbackValue.Type() != tc.functionType {
 		panic(fmt.Sprintf("the type of `callback` should be %s", tc.functionType))
 	}
 	callbackValues := tc.callbackValues
 	if callbackValues == nil {
-		callbackValues = make(map[int]reflect.Value)
+		callbackValues = make(map[interface{}]reflect.Value)
 		tc.callbackValues = callbackValues
 	}
 	callbackValues[callbackID] = callbackValue
@@ -111,7 +111,7 @@ func makeName() string {
 	return fmt.Sprintf("<%s:%d>", shortFileName, lineNumber)
 }
 
-func DoCallback(callbackID int, t *testing.T, context interface{}) {
+func DoCallback(callbackID interface{}, t *testing.T, context interface{}) {
 	testCasesLock.RLock()
 	testCase, ok := testCases[t]
 	testCasesLock.RUnlock()
@@ -121,10 +121,10 @@ func DoCallback(callbackID int, t *testing.T, context interface{}) {
 	testCase.doCallback(callbackID, t, context)
 }
 
-func (tc *TestCase) doCallback(callbackID int, t *testing.T, context interface{}) {
+func (tc *TestCase) doCallback(callbackID interface{}, t *testing.T, context interface{}) {
 	callbackValue, ok := tc.callbackValues[callbackID]
 	if !ok {
-		panic(fmt.Sprintf("can't find callback by id - %d", callbackID))
+		panic(fmt.Sprintf("can't find callback by id - %v", callbackID))
 	}
 	argsValues := [...]reflect.Value{
 		reflect.ValueOf(t),

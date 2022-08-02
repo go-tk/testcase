@@ -18,11 +18,10 @@ func TestExample(t *testing.T) {
         tc := testcase.New(func(t *testing.T, c *context) {
                 t.Parallel()
 
+                testcase.DoCallback("SET_TEST_DATA", t, c)
+
                 client := &http.Client{Transport: &http.Transport{}}
                 defer client.CloseIdleConnections()
-
-                testcase.DoCallback(0, t, c)
-
                 resp, err := client.Get(c.url)
                 if !assert.NoError(t, err) {
                         t.FailNow()
@@ -33,7 +32,7 @@ func TestExample(t *testing.T) {
 
         // get https://httpbin.org/status/200 should response status code 200
         tc.Copy().
-                SetCallback(0, func(t *testing.T, c *context) {
+                SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
                         c.url = "https://httpbin.org/status/200"
                         c.expectedStatusCode = 200
                 }).
@@ -41,7 +40,7 @@ func TestExample(t *testing.T) {
 
         // get https://httpbin.org/status/400 should response status code 400
         tc.Copy().
-                SetCallback(0, func(t *testing.T, c *context) {
+                SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
                         c.url = "https://httpbin.org/status/400"
                         c.expectedStatusCode = 400
                 }).
@@ -49,7 +48,7 @@ func TestExample(t *testing.T) {
 
         // get https://httpbin.org/status/500 should response status code 500
         tc.Copy().
-                SetCallback(0, func(t *testing.T, c *context) {
+                SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
                         c.url = "https://httpbin.org/status/500"
                         c.expectedStatusCode = 500
                 }).

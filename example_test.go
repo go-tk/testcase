@@ -1,55 +1,60 @@
 package testcase_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/go-tk/testcase"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestExample(t *testing.T) {
-	type context struct {
+	type C struct { // C for context
+		ctx                context.Context
 		url                string
 		expectedStatusCode int
+		expectedErr        error
 	}
 
-	tc := testcase.New(func(t *testing.T, c *context) {
-		t.Parallel()
+	tc := testcase.New(func(t *testing.T, c *C) {
+		c.ctx = context.Background() // default
 
 		testcase.DoCallback("SET_TEST_DATA", t, c)
 
-		client := &http.Client{Transport: &http.Transport{}}
-		defer client.CloseIdleConnections()
-		resp, err := client.Get(c.url)
-		if !assert.NoError(t, err) {
-			t.FailNow()
+		req, _ := http.NewRequestWithContext(c.ctx, "GET", c.url, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
 		}
-		defer resp.Body.Close()
+
+		if c.expectedErr != nil {
+			assert.ErrorIs(t, err, c.expectedErr)
+			return
+		}
+		if !assert.NoError(t, err) {
+			return
+		}
 		assert.Equal(t, c.expectedStatusCode, resp.StatusCode)
 	})
 
-	// get https://httpbin.org/status/200 should response status code 200
+	// http client gets https://httpbin.org/status/200 should succeed.
 	tc.Copy().
-		SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
+		SetCallback("SET_TEST_DATA", func(t *testing.T, c *C) {
 			c.url = "https://httpbin.org/status/200"
 			c.expectedStatusCode = 200
 		}).
 		Run(t)
 
-	// get https://httpbin.org/status/400 should response status code 400
+	// http client gets https://httpbin.org/delay/60 with timeout 100ms should return deadline exceeded error.
 	tc.Copy().
-		SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
-			c.url = "https://httpbin.org/status/400"
-			c.expectedStatusCode = 400
-		}).
-		Run(t)
-
-	// get https://httpbin.org/status/500 should response status code 500
-	tc.Copy().
-		SetCallback("SET_TEST_DATA", func(t *testing.T, c *context) {
-			c.url = "https://httpbin.org/status/500"
-			c.expectedStatusCode = 500
+		SetCallback("SET_TEST_DATA", func(t *testing.T, c *C) {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			t.Cleanup(cancel)
+			c.ctx = ctx
+			c.url = "https://httpbin.org/delay/60"
+			c.expectedErr = context.DeadlineExceeded
 		}).
 		Run(t)
 }

@@ -21,7 +21,7 @@ func TestNew(t *testing.T) {
 		func(*testing.T, struct{}) {},
 		func(*testing.T, *struct{}) bool { return false },
 	} {
-		assert.PanicsWithValue(t, "the type of `function` should be func(*testing.T, *context)", func() {
+		assert.PanicsWithValue(t, "the type of `function` should be func(*testing.T, *type)", func() {
 			New(f)
 		})
 	}
@@ -60,16 +60,22 @@ Callback IDs: 123, abc
 }
 
 func TestTestCase_Run(t *testing.T) {
-	type context struct {
+	type C struct {
 		N int
 	}
-	var f bool
-	New(func(t *testing.T, c *context) {
-		f = true
-		assert.Equal(t, t.Name(), "TestTestCase_Run/<testcase_test.go:71>")
+	var n int
+	New(func(t *testing.T, c *C) {
+		n++
+		assert.Equal(t, t.Name(), "TestTestCase_Run/<testcase_test.go:77>")
 		assert.NotNil(t, c)
+
+		New(func(t *testing.T, c *C) {
+			n++
+			assert.Equal(t, t.Name(), "TestTestCase_Run/<testcase_test.go:77>/<testcase_test.go:76>")
+			assert.NotNil(t, c)
+		}).Run(t)
 	}).Run(t)
-	assert.True(t, f)
+	assert.Equal(t, 2, n)
 }
 
 func TestDoCallback(t *testing.T) {

@@ -21,7 +21,7 @@ func New(function interface{}) *TestCase {
 	tc.functionValue = reflect.ValueOf(function)
 	tc.functionType = tc.functionValue.Type()
 	if !validateFunctionType(tc.functionType) {
-		panic(fmt.Sprintf("the type of `function` should be func(*testing.T, *context)"))
+		panic(fmt.Sprintf("the type of `function` should be func(*testing.T, *type)"))
 	}
 	tc.contextPtrType = tc.functionType.In(1)
 	return &tc

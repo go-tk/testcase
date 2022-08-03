@@ -21,7 +21,7 @@ func TestNew(t *testing.T) {
 		func(*testing.T, struct{}) {},
 		func(*testing.T, *struct{}) bool { return false },
 	} {
-		assert.PanicsWithValue(t, "the type of `function` should be func(*testing.T, *type)", func() {
+		assert.PanicsWithValue(t, "the type of `function` should be func(*testing.T, *C)", func() {
 			New(f)
 		})
 	}

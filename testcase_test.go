@@ -2,107 +2,99 @@ package testcase_test
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/go-tk/testcase"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNew(t *testing.T) {
-	assert.NotPanics(t, func() {
-		New(func(*testing.T, *struct{}) {})
-	})
+func TestTestCase_WithTag(t *testing.T) {
+	type C struct{}
+	var name string
 
-	for _, f := range []interface{}{
-		1,
-		func() {},
-		func(int) {},
-		func(byte, int, float64) {},
-		func(struct{}, struct{}) {},
-		func(*testing.T, struct{}) {},
-		func(*testing.T, *struct{}) bool { return false },
-	} {
-		assert.PanicsWithValue(t, "the type of `function` should be func(*testing.T, *C)", func() {
-			New(f)
-		})
-	}
-}
-
-func TestTestCase_SetCallback(t *testing.T) {
-	tc := New(func(*testing.T, *struct{}) {}).SetCallback("abc", func(*testing.T, *struct{}) {})
-	assert.Equal(t, `
-Function Type: func(*testing.T, *struct {})
-Callback IDs: abc
-`[1:], tc.DumpAsString())
-
-	tc.SetCallback(123, func(*testing.T, *struct{}) {})
-	assert.Equal(t, `
-Function Type: func(*testing.T, *struct {})
-Callback IDs: 123, abc
-`[1:], tc.DumpAsString())
-
-	assert.PanicsWithValue(t, "the type of `callback` should be func(*testing.T, *struct {})", func() {
-		tc.SetCallback("xyz", func(*testing.T, *string) {})
-	})
-}
-
-func TestTestCase_Copy(t *testing.T) {
-	tc := New(func(*testing.T, *struct{}) {}).SetCallback("abc", func(*testing.T, *struct{}) {})
-	tc2 := tc.Copy().SetCallback(123, func(*testing.T, *struct{}) {})
-
-	assert.Equal(t, `
-Function Type: func(*testing.T, *struct {})
-Callback IDs: abc
-`[1:], tc.DumpAsString())
-	assert.Equal(t, `
-Function Type: func(*testing.T, *struct {})
-Callback IDs: 123, abc
-`[1:], tc2.DumpAsString())
-}
-
-func TestTestCase_Run(t *testing.T) {
-	type C struct {
-		N int
-	}
-	var n int
 	New(func(t *testing.T, c *C) {
-		n++
-		assert.Equal(t, t.Name(), "TestTestCase_Run/<testcase_test.go:77>")
-		assert.NotNil(t, c)
+		name = t.Name()
+	}).WithTag("my_tag").Run(t)
+	assert.Equal(t, "TestTestCase_WithTag/testcase_test.go:17@my_tag", name)
 
-		New(func(t *testing.T, c *C) {
-			n++
-			assert.Equal(t, t.Name(), "TestTestCase_Run/<testcase_test.go:77>/<testcase_test.go:76>")
-			assert.NotNil(t, c)
-		}).Run(t)
-	}).Run(t)
-	assert.Equal(t, 2, n)
+	New(func(t *testing.T, c *C) {
+		name = t.Name()
+	}).WithTag("").Run(t)
+	assert.Equal(t, "TestTestCase_WithTag/testcase_test.go:22", name)
 }
 
-func TestDoCallback(t *testing.T) {
-	var output []string
-	tc :=
-		New(func(t *testing.T, c *struct{}) {
-			DoCallback(123, t, c)
-			DoCallback("abc", t, c)
+func TestTestCase_Callback(t *testing.T) {
+	{
+		type C struct {
+			n string
+		}
+		var s string
+		New(func(t *testing.T, c *C) {
+			c.n += "1"
+			Callback(t, "cb_1")
+			c.n += "2"
+			Callback(t, "cb_2")
+			c.n += "3"
+			Callback(t, "cb_3")
+		}).WithCallback("cb_1", func(t *testing.T, c *C) {
+			s += "a"
+			s += c.n
+		}).WithCallback("cb_2", func(t *testing.T, c *C) {
+			s += "b"
+			s += c.n
+		}).WithCallback("cb_3", func(t *testing.T, c *C) {
+			s += "c"
+			s += c.n
+		}).Run(t)
+		assert.Equal(t, "a1b12c123", s)
+	}
 
-			assert.PanicsWithValue(t, "can't find callback by id - xyz", func() {
-				DoCallback("xyz", t, c)
-			})
-
-			assert.PanicsWithValue(t, "the type of `context` should be *struct {}", func() {
-				DoCallback(123, t, struct{}{})
-			})
-		}).
-			SetCallback("abc", func(*testing.T, *struct{}) {
-				output = append(output, "abc")
-			}).
-			SetCallback(123, func(*testing.T, *struct{}) {
-				output = append(output, "123")
-			})
-	tc.Run(t)
-	assert.Equal(t, []string{"123", "abc"}, output)
-
-	assert.PanicsWithValue(t, "should only be called from test case functions", func() {
-		DoCallback(123, t, &struct{}{})
+	assert.PanicsWithValue(t, "can't find context", func() {
+		Callback(t, "foo")
 	})
+	New(func(t *testing.T, c *struct{}) {
+		assert.PanicsWithValue(t, "can't find callback by id: foo", func() {
+			Callback(t, "foo")
+		})
+	}).Run(t)
+}
+
+func TestTestCase_OptionalCallback(t *testing.T) {
+	{
+		type C struct {
+			n string
+		}
+		var s string
+		New(func(t *testing.T, c *C) {
+			c.n += "1"
+			OptionalCallback(t, "cb_1")
+			c.n += "2"
+			OptionalCallback(t, "cb_2")
+			c.n += "3"
+			OptionalCallback(t, "cb_3")
+		}).WithCallback("cb_1", func(t *testing.T, c *C) {
+			s += "a"
+			s += c.n
+		}).WithCallback("cb_3", func(t *testing.T, c *C) {
+			s += "c"
+			s += c.n
+		}).Run(t)
+		assert.Equal(t, "a1c123", s)
+	}
+
+	assert.PanicsWithValue(t, "can't find context", func() {
+		OptionalCallback(t, "foo")
+	})
+}
+
+func TestTestCase_RunParallel(t *testing.T) {
+	defer func(t0 time.Time) {
+		assert.Less(t, time.Since(t0).Seconds(), 1.0)
+	}(time.Now())
+
+	for i := 0; i < 2; i++ {
+		New(func(t *testing.T, c *struct{}) {
+			time.Sleep(time.Second * 4 / 5)
+		}).RunParallel(t)
+	}
 }

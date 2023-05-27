@@ -11,50 +11,49 @@ Tiny testing framework
 ```go
 func TestExample(t *testing.T) {
         type C struct { // C for context
-                ctx                context.Context
-                url                string
-                expectedStatusCode int
-                expectedErr        error
+                ctx  context.Context
+                url  string
+                resp *http.Response
+                err  error
         }
-
         tc := testcase.New(func(t *testing.T, c *C) {
                 c.ctx = context.Background() // default
 
-                testcase.DoCallback("SET_TEST_DATA", t, c)
+                testcase.Callback(t, "INIT")
 
                 req, _ := http.NewRequestWithContext(c.ctx, "GET", c.url, nil)
-                resp, err := http.DefaultClient.Do(req)
-                if err == nil {
-                        defer resp.Body.Close()
+                c.resp, c.err = http.DefaultClient.Do(req)
+                if c.err == nil {
+                        t.Cleanup(func() { c.resp.Body.Close() })
                 }
 
-                if c.expectedErr != nil {
-                        assert.ErrorIs(t, err, c.expectedErr)
-                        return
-                }
-                if !assert.NoError(t, err) {
-                        return
-                }
-                assert.Equal(t, c.expectedStatusCode, resp.StatusCode)
+                testcase.Callback(t, "CHECK")
         })
 
-        // http client gets https://httpbin.org/status/200 should succeed.
-        tc.Copy().
-                SetCallback("SET_TEST_DATA", func(t *testing.T, c *C) {
-                        c.url = "https://httpbin.org/status/200"
-                        c.expectedStatusCode = 200
-                }).
-                Run(t)
+        // http client gets https://httpbin.org/delay/60 with timeout 100ms
+        // should return with deadline exceeded error.
+        tc.WithCallback("INIT", func(t *testing.T, c *C) {
+                ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+                t.Cleanup(cancel)
+                c.ctx = ctx
+                c.url = "https://httpbin.org/status/200"
+        }).WithCallback("CHECK", func(t *testing.T, c *C) {
+                assert.ErrorIs(t, c.err, context.DeadlineExceeded)
+        }).Run(t)
 
-        // http client gets https://httpbin.org/delay/60 with timeout 100ms should return deadline exceeded error.
-        tc.Copy().
-                SetCallback("SET_TEST_DATA", func(t *testing.T, c *C) {
-                        ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-                        t.Cleanup(cancel)
-                        c.ctx = ctx
-                        c.url = "https://httpbin.org/delay/60"
-                        c.expectedErr = context.DeadlineExceeded
-                }).
-                Run(t)
+        // http client gets https://httpbin.org/status/(200|201|202)
+        // should respond with the corresponding status code.
+        for _, statusCode := range [...]int{200, 201, 202} {
+                tc.WithTag(
+                        fmt.Sprintf("status_code_%d", statusCode),
+                ).WithCallback("INIT", func(t *testing.T, c *C) {
+                        c.url = fmt.Sprintf("https://httpbin.org/status/%d", statusCode)
+                }).WithCallback("CHECK", func(t *testing.T, c *C) {
+                        if c.err != nil {
+                                t.Fatal(c.err)
+                        }
+                        assert.Equal(t, statusCode, c.resp.StatusCode)
+                }).RunParallel(t)
+        }
 }
 ```

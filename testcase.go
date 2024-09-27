@@ -5,43 +5,53 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCase represents a test case.
-type TestCase[C any, F func(t *testing.T, c *C)] struct {
-	function     F
+type TestCase[C any] struct {
+	T      *testing.T
+	C      C
+	Assert *assert.Assertions
+
+	function     func(*TestCase[C])
 	tag          string
-	callbackList []callbackItem
+	callbackList []callbackItem[C]
+	callbacks    map[string]func(*TestCase[C])
+}
+
+type callbackItem[C any] struct {
+	ID    string
+	Value func(*TestCase[C])
 }
 
 // New creates a test case.
-func New[C any, F func(t *testing.T, c *C)](function F) TestCase[C, F] {
-	return TestCase[C, F]{
+func New[C any](function func(*TestCase[C])) TestCase[C] {
+	return TestCase[C]{
 		function: function,
 	}
 }
 
 // WithTag attaches a tag to the test case.
 // A new test case is returned.
-func (tc TestCase[C, F]) WithTag(tag string) TestCase[C, F] {
+func (tc TestCase[C]) WithTag(tag string) TestCase[C] {
 	tc.tag = tag
 	return tc
 }
 
 // WithCallback registers a callback for the given callback ID.
 // A new test case is returned.
-func (tc TestCase[C, F]) WithCallback(callbackID string, callback F) TestCase[C, F] {
-	tc.callbackList = append(tc.callbackList, callbackItem{
-		ID: callbackID,
-		Value: func(t *testing.T, c interface{}) {
-			callback(t, c.(*C))
-		},
+func (tc TestCase[C]) WithCallback(callbackID string, callback func(*TestCase[C])) TestCase[C] {
+	tc.callbackList = append(tc.callbackList, callbackItem[C]{
+		ID:    callbackID,
+		Value: callback,
 	})
 	return tc
 }
 
 // Run executes the test case.
-func (tc TestCase[C, F]) Run(t *testing.T) {
+func (tc TestCase[C]) Run(t *testing.T) {
 	name := tc.makeName()
 	t.Run(name, func(t *testing.T) {
 		tc.doRun(t)
@@ -49,7 +59,7 @@ func (tc TestCase[C, F]) Run(t *testing.T) {
 }
 
 // RunParallel executes the test case in parallel mode.
-func (tc TestCase[C, F]) RunParallel(t *testing.T) {
+func (tc TestCase[C]) RunParallel(t *testing.T) {
 	name := tc.makeName()
 	t.Run(name, func(t *testing.T) {
 		t.Parallel()
@@ -57,7 +67,7 @@ func (tc TestCase[C, F]) RunParallel(t *testing.T) {
 	})
 }
 
-func (tc *TestCase[C, F]) makeName() string {
+func (tc *TestCase[C]) makeName() string {
 	_, fileName, lineNumber, _ := runtime.Caller(2)
 	shortFileName := filepath.Base(fileName)
 	if tc.tag == "" {
@@ -66,45 +76,37 @@ func (tc *TestCase[C, F]) makeName() string {
 	return fmt.Sprintf("%s:%d@%s", shortFileName, lineNumber, tc.tag)
 }
 
-func (tc *TestCase[C, F]) doRun(t *testing.T) {
-	c := new(C)
-	context := newContext(c, tc.callbackList)
-	setContext(t, context)
-	t.Cleanup(func() { clearContext(t) })
-	tc.function(t, c)
+func (tc *TestCase[C]) doRun(t *testing.T) {
+	tc.T = t
+	tc.Assert = assert.New(t)
+	tc.populateCallbacks()
+	tc.function(tc)
 }
 
-type callbackItem struct {
-	ID    string
-	Value callback
+func (tc *TestCase[C]) populateCallbacks() {
+	callbacks := make(map[string]func(*TestCase[C]), len(tc.callbackList))
+	for _, callbackItem := range tc.callbackList {
+		callbacks[callbackItem.ID] = callbackItem.Value
+	}
+	tc.callbacks = callbacks
 }
-
-type callback func(t *testing.T, c interface{})
 
 // Callback executes the callback with the given callback ID.
 // If the callback does not exists, it panics.
-func Callback(t *testing.T, callbackID string) {
-	context, ok := getContext(t)
-	if !ok {
-		panic("can't find context")
-	}
-	callback, ok := context.GetCallback(callbackID)
+func (tc *TestCase[C]) Callback(callbackID string) {
+	callback, ok := tc.callbacks[callbackID]
 	if !ok {
 		panic(fmt.Sprintf("can't find callback by id: %s", callbackID))
 	}
-	callback(t, context.C())
+	callback(tc)
 }
 
 // OptionalCallback executes the callback with the given callback ID.
 // If the callback does not exists, nothing happens.
-func OptionalCallback(t *testing.T, callbackID string) {
-	context, ok := getContext(t)
-	if !ok {
-		panic("can't find context")
-	}
-	callback, ok := context.GetCallback(callbackID)
+func (tc *TestCase[C]) OptionalCallback(callbackID string) {
+	callback, ok := tc.callbacks[callbackID]
 	if !ok {
 		return
 	}
-	callback(t, context.C())
+	callback(tc)
 }

@@ -12,79 +12,74 @@ func TestTestCase_WithTag(t *testing.T) {
 	type C struct{}
 	var name string
 
-	New(func(t *testing.T, c *C) {
-		name = t.Name()
+	New(func(tc *TestCase[C]) {
+		name = tc.T.Name()
 	}).WithTag("my_tag").Run(t)
 	assert.Equal(t, "TestTestCase_WithTag/testcase_test.go:17@my_tag", name)
 
-	New(func(t *testing.T, c *C) {
-		name = t.Name()
+	New(func(tc *TestCase[C]) {
+		name = tc.T.Name()
 	}).WithTag("").Run(t)
 	assert.Equal(t, "TestTestCase_WithTag/testcase_test.go:22", name)
 }
 
 func TestTestCase_Callback(t *testing.T) {
+	type C struct {
+		N string
+	}
+
 	{
-		type C struct {
-			n string
-		}
 		var s string
-		New(func(t *testing.T, c *C) {
-			c.n += "1"
-			Callback(t, "cb_1")
-			c.n += "2"
-			Callback(t, "cb_2")
-			c.n += "3"
-			Callback(t, "cb_3")
-		}).WithCallback("cb_1", func(t *testing.T, c *C) {
+		New(func(tc *TestCase[C]) {
+			tc.C.N += "1"
+			tc.Callback("cb_1")
+			tc.C.N += "2"
+			tc.Callback("cb_2")
+			tc.C.N += "3"
+			tc.Callback("cb_3")
+		}).WithCallback("cb_1", func(tc *TestCase[C]) {
 			s += "a"
-			s += c.n
-		}).WithCallback("cb_2", func(t *testing.T, c *C) {
+			s += tc.C.N
+		}).WithCallback("cb_2", func(tc *TestCase[C]) {
 			s += "b"
-			s += c.n
-		}).WithCallback("cb_3", func(t *testing.T, c *C) {
+			s += tc.C.N
+		}).WithCallback("cb_3", func(tc *TestCase[C]) {
 			s += "c"
-			s += c.n
+			s += tc.C.N
 		}).Run(t)
 		assert.Equal(t, "a1b12c123", s)
 	}
 
-	assert.PanicsWithValue(t, "can't find context", func() {
-		Callback(t, "foo")
-	})
-	New(func(t *testing.T, c *struct{}) {
-		assert.PanicsWithValue(t, "can't find callback by id: foo", func() {
-			Callback(t, "foo")
+	New(func(tc *TestCase[C]) {
+		tc.Assert.PanicsWithValue("can't find callback by id: foo", func() {
+			tc.Callback("foo")
 		})
 	}).Run(t)
 }
 
 func TestTestCase_OptionalCallback(t *testing.T) {
+	type C struct {
+		N string
+	}
+
 	{
-		type C struct {
-			n string
-		}
 		var s string
-		New(func(t *testing.T, c *C) {
-			c.n += "1"
-			OptionalCallback(t, "cb_1")
-			c.n += "2"
-			OptionalCallback(t, "cb_2")
-			c.n += "3"
-			OptionalCallback(t, "cb_3")
-		}).WithCallback("cb_1", func(t *testing.T, c *C) {
+		New(func(tc *TestCase[C]) {
+			tc.C.N += "1"
+			tc.OptionalCallback("cb_1")
+			tc.C.N += "2"
+			tc.OptionalCallback("cb_2")
+			tc.C.N += "3"
+			tc.OptionalCallback("cb_3")
+		}).WithCallback("cb_1", func(tc *TestCase[C]) {
 			s += "a"
-			s += c.n
-		}).WithCallback("cb_3", func(t *testing.T, c *C) {
+			s += tc.C.N
+		}).WithCallback("cb_3", func(tc *TestCase[C]) {
 			s += "c"
-			s += c.n
+			s += tc.C.N
 		}).Run(t)
 		assert.Equal(t, "a1c123", s)
 	}
-
-	assert.PanicsWithValue(t, "can't find context", func() {
-		OptionalCallback(t, "foo")
-	})
 }
 
 func TestTestCase_RunParallel(t *testing.T) {
@@ -92,8 +87,12 @@ func TestTestCase_RunParallel(t *testing.T) {
 		assert.Less(t, time.Since(t0).Seconds(), 1.0)
 	}(time.Now())
 
+	type C struct {
+		N string
+	}
+
 	for i := 0; i < 2; i++ {
-		New(func(t *testing.T, c *struct{}) {
+		New(func(tc *TestCase[C]) {
 			time.Sleep(time.Second * 4 / 5)
 		}).RunParallel(t)
 	}

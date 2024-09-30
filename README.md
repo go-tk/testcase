@@ -12,49 +12,49 @@ Tiny testing framework
 func TestExample(t *testing.T) {
     type C struct { // C for context
         // prepare
-        ctx context.Context
-        url string
+        Ctx context.Context
+        URL string
 
         // check
-        resp *http.Response
-        err  error
+        Resp *http.Response
+        Err  error
     }
-    tc := testcase.New(func(t *testing.T, c *C) {
-        c.ctx = context.Background() // default
+    tc := testcase.New(func(tc *testcase.TestCase[C]) {
+        tc.C.Ctx = context.Background() // default
 
-        testcase.Callback(t, "PREPARE")
+        tc.Callback("PREPARE")
 
-        req, _ := http.NewRequestWithContext(c.ctx, "GET", c.url, nil)
-        c.resp, c.err = http.DefaultClient.Do(req)
+        req, _ := http.NewRequestWithContext(tc.C.Ctx, "GET", tc.C.URL, nil)
+        tc.C.Resp, tc.C.Err = http.DefaultClient.Do(req)
 
-        testcase.Callback(t, "CHECK")
+        tc.Callback("CHECK")
     })
 
-    // CASE-1: http client gets https://httpbin.org/delay/60 with timeout 100ms
-    //         should return with deadline exceeded error.
-    tc.WithTag("delay-60").
-        WithCallback("PREPARE", func(t *testing.T, c *C) {
-            ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-            t.Cleanup(cancel)
-            c.ctx = ctx
-            c.url = "https://httpbin.org/delay/60"
+    // CASE-1: http client gets https://httpbin.org/status/201
+    //         should respond with the status code 201.
+    tc.WithTag("status-201").
+        WithCallback("PREPARE", func(tc *testcase.TestCase[C]) {
+            tc.C.URL = "https://httpbin.org/status/201"
         }).
-        WithCallback("CHECK", func(t *testing.T, c *C) {
-            assert.ErrorIs(t, c.err, context.DeadlineExceeded)
+        WithCallback("CHECK", func(tc *testcase.TestCase[C]) {
+            if tc.C.Err != nil {
+                tc.T.Fatal(tc.C.Err)
+            }
+            tc.Assert.Equal(tc.C.Resp.StatusCode, 201)
         }).
         RunParallel(t)
 
-    // CASE-2: http client gets https://httpbin.org/status/201
-    //         should respond with the status code 201.
-    tc.WithTag("status-201").
-        WithCallback("PREPARE", func(t *testing.T, c *C) {
-            c.url = "https://httpbin.org/status/201"
+    // CASE-2: http client gets https://httpbin.org/delay/60 with timeout 10ms
+    //         should return with deadline exceeded error.
+    tc.WithTag("deadline-exceeded").
+        WithCallback("PREPARE", func(tc *testcase.TestCase[C]) {
+            ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+            tc.T.Cleanup(cancel)
+            tc.C.Ctx = ctx
+            tc.C.URL = "https://httpbin.org/delay/60"
         }).
-        WithCallback("CHECK", func(t *testing.T, c *C) {
-            if c.err != nil {
-                t.Fatal(c.err)
-            }
-            assert.Equal(t, c.resp.StatusCode, 201)
+        WithCallback("CHECK", func(tc *testcase.TestCase[C]) {
+            tc.Assert.ErrorIs(tc.C.Err, context.DeadlineExceeded)
         }).
         RunParallel(t)
 }
